@@ -1,4 +1,0 @@
-"0","gafa_stock |>"
-"0","  group_by(Symbol) |>"
-"0","  filter(Close == max(Close)) |>"
-"0","  select(Symbol, Date, Close)"
