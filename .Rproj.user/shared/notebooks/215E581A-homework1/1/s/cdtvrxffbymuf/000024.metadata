@@ -1,0 +1,1 @@
+{"classes":["grouped_ts","grouped_df","tbl_ts","tbl_df","tbl","data.frame"],"nrow":4,"ncol":3,"summary":{"A tsibble":["4 x 3 [!]"],"Key":["Symbol [4]"],"Groups":["Symbol [4]"]}}

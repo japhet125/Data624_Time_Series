@@ -1,0 +1,8 @@
+"0","vic_elec |>"
+"0","  autoplot(Demand) +"
+"0","  labs("
+"0","    title = ""Electricity Demand in Victoria"","
+"0","    x = ""Date and Time"","
+"0","    y = ""Electricity Demand"""
+"0","  )"
+"0",""
