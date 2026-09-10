@@ -108,3 +108,67 @@ gafa_stock |>
 ```
 
 2.3
+
+```{r}
+load_data <- read.csv("tute1.csv")
+load_data
+```
+
+a\. read the data into R
+
+```{r}
+tute1 <- readr::read_csv("tute1.csv")
+view(tute1)
+```
+
+b\. convert the data to time series
+
+```{r}
+mytimeseries <- tute1 |>
+  mutate(Quarter = yearquarter(Quarter)) |>
+  as_tsibble(index = Quarter)
+```
+
+c\. construct time series plots of each of the three series
+
+```{r}
+mytimeseries |>
+  pivot_longer(-Quarter) |>
+  ggplot(aes(x = Quarter, y = value, colour = name)) +
+  geom_line() +
+  facet_grid(name ~ ., scales = "free_y")
+```
+
+not including facet_grid the 03 name get store in the same value making it one plot, which might be confusing during interpretation.
+
+2.4
+
+```{r}
+names(us_total)
+```
+
+```{r}
+#install.packages("USgas")
+library(USgas)
+us_total <- us_total |>
+  as_tsibble(key = state, index =  year)
+us_total
+is_tsibble(us_total)
+```
+
+c\. Plot the annual natural gas
+
+```{r}
+new_england <- c(
+   "Maine",
+  "Vermont",
+  "New Hampshire",
+  "Massachusetts",
+  "Connecticut",
+  "Rhode Island"
+  
+)
+us_total |>
+  filter(state %in% new_england) |>
+  autoplot(y)
+```
