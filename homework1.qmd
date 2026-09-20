@@ -324,7 +324,7 @@ h02 |>
 
 -   Cost generally increases relatively from February through December. This pattern repeats across many years.
 
--    unusual years I can identify is year 2005 where we can observe a decrease from February through March
+-   unusual years I can identify is year 2005 where we can observe a decrease from February through March
 
 ```{r}
 us_gasoline |>

@@ -1,0 +1,439 @@
+---
+title: "Homework 2 cahpter3"
+author: "Guibril Ramde"
+format:
+  html: default
+  pdf: default
+---
+
+## 3.7 Exercises
+
+Do exercises 3.1, 3.2, 3.3, 3.4, 3.5, 3.7, 3.8 and 3.9 from the online Hyndman book.  Please include your Rpubs link along with.pdf file of your run code
+
+## 3.1
+
+Consider the GDP information in `global_economy`. Plot the GDP per capita for each country over time. Which country has the highest GDP per capita? How has this changed over time?
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+#install.packages("fpp3")
+library(ggtime)
+library(fpp3)
+```
+
+since we have a large datasets it is safe to find the highest GDP per capita for every year, then observe their changes over time by using plot.
+
+```{r}
+global_economy |>
+  mutate(gdp_per_capita = GDP/Population ) |>
+  filter(!is.na(gdp_per_capita)) |>
+  as_tibble() |>
+  group_by(Year) |>
+  slice_max(
+    order_by = gdp_per_capita,
+    n = 1,
+    with_ties = FALSE
+  ) |>
+  select(Year, Country, gdp_per_capita)
+  
+```
+
+```{r}
+global_economy |>
+  mutate(gdp_per_capita = GDP / Population) |>
+  filter(
+    Country %in% c(
+      "United States",
+      "Kuwait",
+      "Monaco",
+      "United Arab Emirates"
+    )
+  ) |>
+  ggplot(aes(
+    x = Year,
+    y = gdp_per_capita,
+    color = Country
+  )) +
+  geom_line(na.rm = TRUE) +
+  labs(
+    title = "GDP Per Capita Over Time",
+    x = "Year",
+    y = "GDP per capita (USD)",
+    color = "Country"
+  )
+```
+
+**##Interpretation**
+
+The country with the highest GDP per capita for most of the period is Monaco. Monaco shows a strong upward trend over time, although there are some periods of decline, especially around 1980's, 2000 and 2010. Overall, Monaco's GDP per capita increased significantly over time. The United Arab Emirates, the United States, and Kuwait also show an overall upward trend. The United States has a more stable trend, while Kuwait, Monaco, and the United Arab Emirates show more fluctuations and several periods of decline.
+
+## **3.2 .For each of the following series, make a graph of the data. If transforming seems appropriate, do so and describe the effect.**
+
+-   United States GDP from `global_economy`.
+
+```{r}
+global_economy |>
+  filter(Country == "United States") |>
+  autoplot(GDP) +
+  labs(title = "United States GDP",
+    x = "Year",
+    y = "GDP (USD)")
+  
+  
+```
+
+## **Interpretation**
+
+The original U.S. GDP series shows a strong upward trend, with the magnitude of the changes increasing as GDP increases. The log transformation compresses the larger values and makes the growth pattern more nearly linear, helping to stabilize the variation over time.
+
+```{r}
+global_economy |>
+  filter(Country == "United States") |>
+  autoplot(log(GDP)) +
+  labs(title = "Log of United States GDP",
+    x = "Year",
+    y = "GDP (USD)")
+  
+```
+
+-   Slaughter of Victorian “Bulls, bullocks and steers” in `aus_livestock`.
+
+```{r}
+aus_livestock |>
+  filter(State == "Victoria",
+         Animal == "Bulls, bullocks and steers") |>
+  ggplot(aes(x = Month, y = Count)) +
+  geom_line() +
+  labs(title = "Slaughter of Victorian Bulls, bullocks and steers", x = "Month", y = "Count")
+```
+
+```{r}
+victoria_bulls <- aus_livestock |>
+  filter(
+    State == "Victoria",
+    Animal == "Bulls, bullocks and steers"
+  )
+
+dcmp <- victoria_bulls |>
+  model(stl = STL(Count))
+
+components(dcmp) 
+```
+
+```{r}
+victoria_bulls |>
+  autoplot(log(Count))
+```
+
+**##Interpretation**
+
+we could use a log transformation for aus_livestock observation over time, and by using a log transformation we see that the original series ranges differ from the transformed series ranges, but the overall pattern and variability remain similar to the original series.
+
+```{r}
+components(dcmp) |> autoplot()
+```
+
+-   Victorian Electricity Demand from `vic_elec`.
+
+```{r}
+vic_elec |>
+  autoplot(Demand) + labs(title = "Victorian Electricity Demand")
+```
+
+##Interpretation
+
+we could use a log transformation for vic_elec observation over time, and by using a log transformation we see that the original series ranges differ from the transformed series ranges, but the overall pattern and variability remain similar to the original series.
+
+```{r}
+vic_elec |>
+  autoplot(log(Demand)) + labs(title = "Victorian Electricity Demand")
+```
+
+-   Gas production from `aus_production`.
+
+```{r}
+aus_production |>
+  autoplot(Gas) + labs(title = "Australia Gas Production in Quarter")
+```
+
+**##Interpretation**
+
+The original gas production series shows an upward trend and seasonal fluctuations whose size changes with the level of the series. The log transformation compresses the larger values and makes the variation more stable over time.
+
+```{r}
+aus_production |>
+  autoplot(log(Gas)) + labs(title = "Australia Gas Production in Quarter")
+```
+
+## 3.3. **Consider the last five years of the Gas data from `aus_production`.**
+
+let explore the canadian_gas data with a plot
+
+```{r}
+canadian_gas |> autoplot(Volume)
+```
+
+explore with Box - Cox
+
+```{r}
+lambda <- canadian_gas |>
+  features(Volume, features = guerrero) |>
+  pull(lambda_guerrero)
+  
+canadian_gas |> autoplot(box_cox(Volume, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0( "Canada Transformed Gas Production with $\\lambda$ = ", round(lambda, 2))))
+```
+
+**##Interpretation**
+
+Applying a Box–Cox transformation to the Canadian gas production data is not particularly helpful. Although the Guerrero method gives λ = 0.58 and the transformation changes the scale of the data, the overall pattern and variability remain similar to the original series. Therefore, the Box–Cox transformation does not provide a substantial improvement in stabilizing the variance.
+
+## **3.4. What Box-Cox transformation would you select for your retail data (from Exercise 7 in Section [2.10](https://otexts.com/fpp3/graphics-exercises.html#graphics-exercises))?**
+
+```{r}
+set.seed(12345678)
+myseries <- aus_retail |>
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+
+lambda <- myseries |>
+  features(Turnover, features = guerrero) |>
+  pull(lambda_guerrero)
+lambda  
+
+myseries |> autoplot(box_cox(Turnover, lambda))
+```
+
+**##Interpretation**
+
+The box-cox I would select for my retail data from Exercise 7 in section 2.10 is automatically calculating the lambda = 0.083 using features guerrero that will generate a lambda value we will use.
+
+## **3.5. For the following series, find an appropriate Box-Cox transformation in order to stabilise the variance. Tobacco from `aus_production`, Economy class passengers between Melbourne and Sydney from `ansett`, and Pedestrian counts at Southern Cross Station from `pedestrian`.**
+
+```{r}
+lambda <- aus_production |>
+  features(Tobacco, features = guerrero) |>
+  pull(lambda_guerrero)
+  
+aus_production |> autoplot(box_cox(Tobacco, lambda), na.rm = TRUE)
+```
+
+**##Interpretation**
+
+To find an appropriate Box-Cox transformation in order to stabilise the variance. we use the features guerrero which provide a lambda that we apply to plot the graph therefor we can observe the graph shap for Australian tobacco production.
+
+```{r}
+ansett_mel_syd <- ansett |>
+  filter(
+    Class == "Economy",
+    Airports == "MEL-SYD"
+  )
+
+lambda <- ansett_mel_syd |>
+  features(Passengers, features = guerrero) |>
+  pull(lambda_guerrero)
+
+lambda
+
+ansett_mel_syd |>
+  autoplot(box_cox(Passengers, lambda))
+
+```
+
+**##Interpretation**
+
+To find an appropriate Box-Cox transformation in order to stabilize the variance. we use the features guerrero which provide a lambda that we apply to plot the graph therefor we can observe the graph shape for ansett Economy flights. so we can concluded using box-cox is suitable.
+
+```{r}
+southern_cross <- pedestrian |>
+  filter(Sensor == "Southern Cross Station")
+
+lambda <- southern_cross |>
+  features(Count, features = guerrero) |>
+  pull(lambda_guerrero)
+
+lambda
+
+pedestrian |>
+  filter(Sensor == "Southern Cross Station") |>
+  autoplot(box_cox(Count, lambda))
+```
+
+**##Interpretation**
+
+the series contains zero observations, making a standard Box-Cox transformation unsuitable without modifying the data.
+
+## **3.6. Show that a** 3×5 **MA is equivalent to a 7-term weighted moving average with weights of 0.067, 0.133, 0.200, 0.200, 0.200, 0.133, and 0.067.**
+
+6.  for 5-MA:
+
+    $M_t = \frac{1}{5}(y_{t-2} + y_{t-1} + y_t + y_{t+1} + y_{t+2})$
+
+    for 3x5 MA is:
+
+    $$
+    T_t = \frac{1}{3}(M_{t-1} + M_t + M_{t+1})
+    $$
+
+    for 5-MAs:
+
+    $M_{t-1} = \frac{1}{5}(y_{t-3} + y_{t-2} + y_{t-1} + y_t + y_{t+1})$
+
+$M_t = \frac{1}{5}(y_{t-2} + y_{t-1} + y_t + y_{t+1} + y_{t+2})$
+
+$M_{t+1} = \frac{1}{5}(y_{t-1} + y_t + y_{t+1} + y_{t+2} + y_{t+3})$
+
+for Averaging 3 groups of 5 we have:
+
+$\frac{1}{3} \times \frac{1}{5} = \frac{1}{15}\approx 0.067$
+
+by counting the number of occur in each equation we get:
+
+$y_{t-3} = 1$ , $y_{t-2} = 2$ , $y_{t-1} = 3$, $y_t = 3$, $y_{t+1} = 3$, $y_{t+2} = 2$, $y_{t+3} = 1$
+
+each result divided by 15 we get:
+
+$T_t = 0.067y_{t-3} +0.133y_{t-2} +0.200y_{t-1} + 0.200y_t  + 0.200y_{t+1} + 0.133y_{t+2} + 0.067y_{t+3}$
+
+## 3.7. **Consider the last five years of the Gas data from `aus_production`.**
+
+### **a. Plot the time series. Can you identify seasonal fluctuations and/or a trend-cycle?**
+
+```{r}
+gas <- tail(aus_production, 5*4) |> select(Gas)
+gas
+gas |> autoplot(Gas)
+
+
+```
+
+## **Interpretation**
+
+The series shows a repeating quarterly seasonal pattern over the five-year period. Gas production rises and falls at similar times each year, indicating strong seasonality. There is also an overall upward trend in gas production.
+
+### **b. Use `classical_decomposition` with `type=multiplicative` to calculate the trend-cycle and seasonal indices.** 
+
+```{r}
+gas |>
+  model(classical_decomposition(Gas, type = "multiplicative")) |>
+  components() |>
+  autoplot(Gas, na.rm = TRUE) +
+  labs(title = "Classical multiplicative decomposition of Gas Production in Australia")
+```
+
+### **c. Do the results support the graphical interpretation from part a?**
+
+The results support the graphical interpretation from part (a). The classical decomposition shows a clear upward trend and a strong repeating quarterly seasonal pattern.
+
+### **d. Compute and plot the seasonally adjusted data.**
+
+```{r}
+gas_dcmp <- gas |>
+  model(
+    classical_decomposition(Gas, type = "multiplicative")
+  ) |>
+  components()
+gas_dcmp
+
+gas_dcmp |>
+  autoplot(season_adjust) +
+  labs(
+    title = "Seasonally Adjusted Australian Gas Production",
+    x = "Quarter",
+    y = "Gas"
+  )
+```
+
+### **e. Change one observation to be an outlier (e.g., add 300 to one observation), and recompute the seasonally adjusted data. What is the effect of the outlier?**
+
+```{r}
+gas_outlier <- gas |>
+  mutate(
+    Gas = if_else(
+      Quarter == yearquarter("2008 Q1"),
+      Gas + 300,
+      Gas
+    )
+  )
+gas_outlier_dcmp <- gas_outlier |>
+  model(
+    classical_decomposition(Gas, type = "multiplicative")
+  ) |>
+  components()
+gas_outlier_dcmp |>
+  autoplot(season_adjust) +
+  labs(
+    title = "Seasonally Adjusted Gas Production with Outlier",
+    x = "Quarter",
+    y = "Gas"
+  )
+```
+
+## **Interpretation**
+
+Adding 300 to one observation creates a large spike in the seasonally adjusted data. The outlier has a strong effect on that observation and can also affect the estimated components used in the classical decomposition.
+
+### **f. Does it make any difference if the outlier is near the end rather than in the middle of the time series?**
+
+```{r}
+gas_outlier <- gas |>
+  mutate(
+    Gas = if_else(
+      Quarter == yearquarter("2010 Q1"),
+      Gas + 300,
+      Gas
+    )
+  )
+gas_outlier_dcmp <- gas_outlier |>
+  model(
+    classical_decomposition(Gas, type = "multiplicative")
+  ) |>
+  components()
+gas_outlier_dcmp |>
+  autoplot(season_adjust) +
+  labs(
+    title = "Seasonally Adjusted Gas Production with Outlier",
+    x = "Quarter",
+    y = "Gas"
+  )
+```
+
+## **Interpretation**
+
+Yes, it makes a difference when the outlier is near the end rather than in the middle of the time series. An outlier in the middle can affect the estimated trend-cycle around it because there are observations on both sides. Near the end, the trend-cycle cannot be estimated in the same way because there are not enough observations after the outlier. Therefore, the position of the outlier affects the classical decomposition and the seasonally adjusted data.
+
+## **3.8. Recall your retail time series data (from Exercise 7 in Section [2.10](https://otexts.com/fpp3/graphics-exercises.html#graphics-exercises)). Decompose the series using X-11. Does it reveal any outliers, or unusual features that you had not noticed previously?**
+
+```{r}
+#install.packages("seasonal")
+library(seasonal)
+set.seed(12345678)
+myseries <- aus_retail |>
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+myseries
+
+retail_outlier_dcmp <- myseries |>
+  model(
+    x11 = X_13ARIMA_SEATS(Turnover ~ x11())
+  )
+
+retail_outlier_dcmp |>
+  components() |>
+  autoplot()
+```
+
+## **Interpretation**
+
+Observing the remainder component, we can see some unusual positive and negative spikes that were not as noticeable in the original time series. These large deviations represent observations that are not explained by the trend or seasonal components and may indicate unusual events or outliers.
+
+## **3.9. Figures [3.19](https://otexts.com/fpp3/decomposition-exercises.html#fig:labour) and [3.20](https://otexts.com/fpp3/decomposition-exercises.html#fig:labour2) show the result of decomposing the number of persons in the civilian labor force in Australia each month from February 1978 to August 1995.**
+
+### **a. Write about 3–5 sentences describing the results of the decomposition. Pay particular attention to the scales of the graphs in making your interpretation.**
+
+The decomposition shows a smooth upward trend in the Australian civilian labor force from 1978 to 1995. The seasonal component ranges approximately from −100 to +100 and shows a consistent seasonal pattern. December and March have relatively large positive seasonal effects, while January and August have large negative seasonal effects. Compared with the overall level of the series, which increases from approximately 6,500 to 9,000, the seasonal fluctuations are relatively small.
+
+### **b. Is the recession of 1991/1992 visible in the estimated components?**
+
+Yes, the recession of 1991/1992 is visible in the decomposition. The trend component shows that the growth of the labor force slows considerably around 1991–1992. The remainder also shows unusually large negative values around 1991, including a decline of approximately −400.
