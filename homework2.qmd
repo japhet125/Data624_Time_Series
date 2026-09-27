@@ -313,7 +313,7 @@ gas |> autoplot(Gas)
 
 The series shows a repeating quarterly seasonal pattern over the five-year period. Gas production rises and falls at similar times each year, indicating strong seasonality. There is also an overall upward trend in gas production.
 
-### **b. Use `classical_decomposition` with `type=multiplicative` to calculate the trend-cycle and seasonal indices.** 
+### **b. Use `classical_decomposition` with `type=multiplicative` to calculate the trend-cycle and seasonal indices.**
 
 ```{r}
 gas |>
