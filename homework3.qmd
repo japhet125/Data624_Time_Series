@@ -9,7 +9,7 @@ editor: visual
 
 ## Exercise 5
 
-##  5.1 Produce forecasts for the following series using whichever of `NAIVE(y)`, `SNAIVE(y)` or `RW(y ~ drift())` is more appropriate in each case:
+## 5.1 Produce forecasts for the following series using whichever of `NAIVE(y)`, `SNAIVE(y)` or `RW(y ~ drift())` is more appropriate in each case:
 
 ```{r}
 library(fpp3)
@@ -165,7 +165,7 @@ The Australian takeaway food turnover series shows a recurring seasonal pattern.
 
 ## **5.2 Use the Facebook stock price (data set `gafa_stock`) to do the following:**
 
-a. Produce a time plot of the series
+a.  Produce a time plot of the series
 
 ```{r}
 fb_data <- gafa_stock |>

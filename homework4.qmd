@@ -1,0 +1,250 @@
+---
+title: "Predictive modeling"
+author: "Ramde Guibril"
+format:
+  html: default
+  pdf: default
+---
+
+## Exercises
+
+## 3.1
+
+**a. Using visualizations, explore the predictor variables to understand their distributions as well as the relationships between predictors.**
+
+```{r}
+#load the library
+library(mlbench) 
+library(tidyverse)
+library(ggplot2)
+#data
+data(Glass) 
+#String
+str(Glass) 
+# Summary of all variables
+summary(Glass)
+
+```
+
+**###Exploring distribution of all predictors**
+
+```{r}
+#| fig-width: 10
+#| fig-height: 10
+
+predictors <- Glass[, names(Glass) != "Type"]
+
+par(mfrow = c(3, 3))
+
+for (name in names(predictors)) {
+  hist(predictors[[name]],
+       main = paste("Distribution of", name),
+       xlab = name)
+}
+```
+
+**##Interpretation:**
+
+Looking at the distributions of the predictors, RI, K, Ca, Ba, and Fe appear to be right-skewed. Mg appears to be left-skewed, with most observations concentrated at the higher end of its range. Si also shows some left skewness. Na and Al appear more symmetric compared with the other predictors, although Al may have a slight right skew. Ba and Fe have many observations near zero and show particularly strong right skewness.
+
+**###Relationship between predictor**s
+
+```{r}
+#| fig-width: 10
+#| fig-height: 10
+
+pairs(predictors)
+```
+
+```{r}
+round(cor(predictors), 2)
+```
+
+**##Interpretation:**
+
+The scatterplot matrix and correlation matrix show relationships among several predictors. The strongest relationship is between RI and Ca, with a correlation of 0.81, indicating a strong positive relationship. RI and Si have a moderate negative relationship with a correlation of -0.54. Other moderate relationships include Mg and Ba (-0.49), Mg and Al (-0.48), Al and Ba (0.48), and Mg and Ca (-0.44). Many of the remaining predictor pairs have relatively weak linear relationships.
+
+**b. Do there appear to be any outliers in the data? Are any predictors skewed?**
+
+```{r}
+#| fig-width: 10
+#| fig-height: 10
+
+par(mfrow = c(3, 3))
+
+for (name in names(predictors)) {
+  boxplot(predictors[[name]],
+          main = name)
+}
+```
+
+**##Interpretation:**
+
+Based on the boxplots, most predictors appear to contain potential outliers. RI, Na, Al, Si, K, Ca, Ba, and Fe have observations outside the boxplot whiskers, while Mg does not show obvious outliers. From the histograms, RI, K, Ca, Ba, and Fe are right-skewed, while Mg and Si show left skewness. Na and Al appear more symmetric compared with the other predictors.
+
+**c. Are there any relevant transformations of one or more predictors that might improve the classification model?**
+
+```{r}
+#| fig-width: 10
+#| fig-height: 10
+
+par(mfrow = c(2, 2))
+
+hist(Glass$K, main = "Original K")
+hist(sqrt(Glass$K), main = "Square Root")
+hist(log1p(Glass$K), main = "Log(1 + K)")
+hist(log(Glass$K + 0.01), main = "Log(K + 0.01)")
+```
+
+```{r}
+#| fig-width: 10
+#| fig-height: 10
+
+par(mfrow = c(2, 2))
+
+hist(Glass$Ca, main = "Original Ca")
+hist(sqrt(Glass$Ca), main = "Square Root")
+hist(log1p(Glass$Ca), main = "Log(1 + Ca)")
+hist(log(Glass$Ca), main = "Log(Ca)")
+```
+
+```{r}
+#| fig-width: 10
+#| fig-height: 10
+
+par(mfrow = c(2, 2))
+
+hist(Glass$Ba, main = "Original Ba")
+hist(sqrt(Glass$Ba), main = "Square Root")
+hist(log1p(Glass$Ba), main = "Log(1 + Ba)")
+hist(log(Glass$Ba + 0.01), main = "Log(Ba + 0.01)")
+```
+
+```{r}
+#| fig-width: 10
+#| fig-height: 10
+
+par(mfrow = c(2, 2))
+
+hist(Glass$Fe, main = "Original Fe")
+hist(sqrt(Glass$Fe), main = "Square Root")
+hist(log1p(Glass$Fe), main = "Log(1 + Fe)")
+hist(log(Glass$Fe + 0.01), main = "Log(Fe + 0.01)")
+```
+
+**##Interpretation**:
+
+Several predictors are skewed, so transformations may be considered. For Ca, square-root and log transformations reduce the long right tail, with a log transformation providing a more compressed distribution. K is also strongly right-skewed, but it contains many zero values, making a standard log transformation inappropriate. Square-root and `log1p` transformations can accommodate the zeros but do not completely remove the skewness. Ba and Fe contain a large number of zero values, so their skewness is partly caused by the concentration of observations at zero. Log transformations with an added constant preserve these observations but do not necessarily produce symmetric distributions. Therefore, transformations may be useful for some predictors, especially Ca, but their effect on classification performance should ultimately be evaluated during model training.
+
+**3.2**
+
+```{r}
+data(Soybean)
+#Summary
+summary(Soybean)
+#Soybean
+
+```
+
+**a. Investigate the frequency distributions for the categorical predictors. Are any of the distributions degenerate in the ways discussed earlier in this chapter?**
+
+```{r}
+#str(Soybean)
+#summary(Soybean)
+Soybean_long <- Soybean |>
+  mutate(across(-Class, as.character)) |>
+  pivot_longer(
+    cols = -Class,
+    names_to = "Predictor",
+    values_to = "Value"
+  )
+Soybean_long
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 8
+
+Soybean_frequency <- Soybean_long |>
+  count(Predictor, Value)
+Soybean_frequency
+
+Soybean_long |>
+  filter(!is.na(Value)) |>
+  ggplot(aes(x = Value)) +
+  geom_bar() +
+  facet_wrap(~ Predictor, scales = "free_x") +
+  labs(
+    title = "Frequency Distribution of Soybean Predictor",
+    x = "Category",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+Soybean_long |>
+  filter(!is.na(Value)) |>
+  count(Predictor, Value) |>
+  group_by(Predictor) |>
+  mutate(Percent = n / sum(n) * 100) |>
+  summarise(
+    Largest_Percent = max(Percent),
+    Number_of_Categories = n()
+  ) |>
+  arrange(desc(Largest_Percent))
+```
+
+**##Interpretation:**
+
+The frequency distributions show that several categorical predictors are highly unbalanced. For example, mycelium is dominated by category 0, with 639 observations compared with only 6 observations in category 1. Other predictors such as sclerotia, leaf.malf, shriveling, and leaf.mild also show strong imbalance toward one category. In contrast, variables such as plant.stand and crop.hist have more balanced distributions across their categories. Therefore, some predictors appear to have near-zero variation and may provide limited information for prediction.
+
+**b. Roughly 18% of the data are missing. Are there particular predictors that are more likely to be missing? Is the pattern of missing data related to the classes?**
+
+```{r}
+Soybean_long |>
+  group_by(Predictor) |>
+  summarize(Missing = sum(is.na(Value)),
+            Percent_Missing = mean(is.na(Value))* 100) |>
+  arrange(desc(Percent_Missing))
+  
+```
+
+**##Let examine which predictors are missing within each class**
+
+```{r}
+Soybean_long |>
+  group_by(Class, Predictor) |>
+  summarise(Percent_Missing = mean(is.na(Value)) * 100,
+            .groups = "drop") |>
+  filter(Percent_Missing > 0) |>
+  arrange(Class, desc(Percent_Missing))
+```
+
+**##Interpretation:**
+
+There are particular predictors that are more likely to have missing values than others. The missing values are also not evenly distributed across the classes. Some classes, such as 2-4-d-injury, cyst-nematode, and herbicide-injury, have several predictors with 100% missing values, while phytophthora-rot has many predictors with about 77% missing values. Therefore, the pattern of missing data appears to be related to the classes.
+
+**C. Develop a strategy for handling missing data, either by eliminating predictors or imputation.**
+
+```{r}
+get_mode <- function(x) {
+  values <- x[!is.na(x)]
+  names(sort(table(values), decreasing = TRUE))[1]
+}
+
+```
+
+```{r}
+Soybean_imputed <- Soybean |>
+  mutate(across(-Class,
+                ~ replace(., is.na(.), get_mode(.))
+                ))
+#
+head(Soybean_imputed, 10)
+sum(is.na(Soybean_imputed))
+```
+
+**##Interpretation:**
+
+I would use imputation rather than eliminate predictors because removing predictors could result in the loss of useful information. Since the predictors are categorical, I used mode imputation, replacing each missing value with the most frequent observed category for that predictor. After imputation, there were no remaining missing values. However, because the missing-data pattern appears to be related to the disease classes, mode imputation should be used carefully, especially for predictors with high percentages of missing values.
