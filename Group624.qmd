@@ -1,0 +1,421 @@
+---
+title: "Group Presentation SVM"
+format: html
+editor: visual
+---
+
+## Support Vector Machines
+
+**##Introduction**
+
+In machine learning, **support vector machines** are supervised learning models with associated learning algorithms that analyze data used for classification and regression analysis. However, they are mostly used in classification problems. In this tutorial, we will try to gain a high-level understanding of how SVMs work and then implement them using R. I’ll focus on developing intuition rather than rigor. What that essentially means is we will skip as much of the math as possible and develop a strong intuition of the working principle.
+
+**##Support Vector Machines Algorithm**
+
+**###Linear Data**
+
+The basics of Support Vector Machines and how it works are best understood with a simple example. Let’s imagine we have two tags: *red* and *blue*, and our data has two features: x and y. We want a classifier that, given a pair of (x,y) coordinates, outputs if it’s either *red* or *blue*. We plot our already labeled training data on a plane:
+
+```{r}
+library(tidyverse)
+
+set.seed(123)
+
+# Create training data
+svm_data <- data.frame(
+  x = c(1, 2, 2, 3, 3, 4, 2, 4, 3, 5,
+        5, 6, 7, 7, 8, 8, 9, 6, 9, 10),
+  y = c(2, 1, 3, 2, 4, 3, 5, 4, 1, 2,
+        7, 6, 8, 5, 7, 9, 8, 9, 6, 10),
+  Class = factor(rep(c("Red", "Blue"), each = 10))
+)
+
+# Plot training data
+ggplot(svm_data, aes(x = x, y = y, color = Class)) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("Red" = "red",
+                                "Blue" = "blue")) +
+  labs(
+    title = "SVM Training Data",
+    subtitle = "Classification of Red and Blue Points",
+    x = "Feature X",
+    y = "Feature Y",
+    color = "Class"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Install once if necessary
+install.packages("e1071")
+
+library(e1071)
+
+# Train linear SVM
+svm_model <- svm(
+  Class ~ x + y,
+  data = svm_data,
+  kernel = "linear",
+  cost = 1,
+  scale = FALSE
+)
+
+# View model summary
+summary(svm_model)
+
+# Plot SVM classification regions
+plot(
+  svm_model,
+  svm_data,
+  x ~ y,
+  col = c("lightblue", "pink"),
+  main = "SVM Classification with Decision Boundary"
+)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(e1071)
+
+# Create a grid of coordinates
+grid <- expand.grid(
+  x = seq(0, 11, length.out = 200),
+  y = seq(0, 11, length.out = 200)
+)
+
+# Obtain SVM decision values
+pred <- predict(
+  svm_model,
+  grid,
+  decision.values = TRUE
+)
+
+grid$decision <- as.vector(
+  attr(pred, "decision.values")
+)
+
+# Identify support vectors
+support_vectors <- svm_data[svm_model$index, ]
+
+ggplot() +
+
+  # Margins (-1 and +1)
+  geom_contour(
+    data = grid,
+    aes(x = x, y = y, z = decision),
+    breaks = c(-1, 1),
+    linetype = "dashed",
+    color = "black"
+  ) +
+
+  # Decision boundary (0)
+  geom_contour(
+    data = grid,
+    aes(x = x, y = y, z = decision),
+    breaks = 0,
+    linetype = "solid",
+    color = "black",
+    linewidth = 1
+  ) +
+
+  # Training observations
+  geom_point(
+    data = svm_data,
+    aes(x = x, y = y, color = Class),
+    size = 3
+  ) +
+
+  # Highlight support vectors
+  geom_point(
+    data = support_vectors,
+    aes(x = x, y = y),
+    shape = 21,
+    size = 5,
+    stroke = 1.2,
+    fill = NA,
+    color = "black"
+  ) +
+
+  scale_color_manual(
+    values = c("Red" = "red", "Blue" = "blue")
+  ) +
+
+  labs(
+    title = "Support Vector Machine Classification",
+    subtitle = "Decision Boundary, Margins and Support Vectors",
+    x = "Feature X",
+    y = "Feature Y",
+    color = "Class"
+  ) +
+
+  coord_equal() +
+  theme_minimal()
+```
+
+- The solid line represents the SVM decision boundary.
+
+- The dashed lines represent the margins.
+
+- The black circles identify support vectors.
+
+- The red and blue points represent the two classes.
+
+But, what exactly is the best hyperplane? For SVM, it’s the one that maximizes the margins from both tags. In other words: the hyperplane (remember it’s a line in this case) whose distance to the nearest element of each tag is the largest.
+
+```{r}
+# New observation
+new_point <- data.frame(
+  x = 6,
+  y = 8
+)
+
+# Predict class
+prediction <- predict(svm_model, new_point)
+
+print(prediction)
+```
+
+**##Interpretation**
+
+A Support Vector Machine (SVM) is a supervised machine learning algorithm used for classification. In this example, the dataset contains two features, x and y, and two classes, red and blue. The SVM uses the labeled training data to identify a decision boundary that separates the two classes. The objective is to find a boundary with the maximum possible margin while accounting for classification errors. The observations that influence this boundary are called support vectors. Once the model is trained, it can predict whether a new observation belongs to the red or blue class based on its coordinates.
+
+**#Non - Linear SVM Classifier**
+
+So that was the linear SVM in the previous section. Now let's move on to the non-linear version of SVM. You will take a look at an example from the textbook **Elements of Statistical Learning**, which has a canonical example in 2 dimensions where the decision boundary is non-linear. You're going to use the kernel support vector machine to try and learn that boundary.
+
+```{r}
+library(tidyverse)
+library(e1071)
+
+set.seed(123)
+
+# Generate sample data
+n <- 200
+
+x <- runif(n, -3, 3)
+y <- runif(n, -3, 3)
+
+# Calculate distance from center
+distance <- x^2 + y^2
+
+# Assign classes
+Class <- ifelse(distance < 2.5, "Red", "Blue")
+
+# Create dataframe
+svm_nonlinear <- data.frame(
+  x = x,
+  y = y,
+  Class = as.factor(Class)
+)
+
+# Visualize the training data
+ggplot(svm_nonlinear,
+       aes(x = x, y = y, color = Class)) +
+  geom_point(size = 2.5) +
+  scale_color_manual(
+    values = c("Red" = "red", "Blue" = "blue")
+  ) +
+  labs(
+    title = "Nonlinear SVM Training Data",
+    x = "Feature X",
+    y = "Feature Y"
+  ) +
+  coord_equal() +
+  theme_minimal()
+```
+
+##Interpretation
+
+A straight line cannot separate these classes effectively. However, a nonlinear SVM using a radial basis function (RBF) kernel can learn a curved boundary.
+
+Explanation: The variable `distance` determines how far each observation is from the origin. Points with \\(x\^2+y\^2\<2.5\\) belong to the Red class, while the remaining points belong to the Blue class.
+
+##Train the nonlinear SVM
+
+We use the RBF kernel, which allows SVM to learn nonlinear decision boundaries.
+
+```{r}
+# Train nonlinear SVM
+svm_nonlinear_model <- svm(
+  Class ~ x + y,
+  data = svm_nonlinear,
+  kernel = "radial",
+  cost = 10,
+  gamma = 0.5,
+  scale = FALSE
+)
+
+# Model summary
+summary(svm_nonlinear_model)
+```
+
+##Interpretation
+
+Two important parameters:
+
+- `cost = 10`: Controls the penalty for margin violations and classification errors.
+
+- `gamma = 0.5`: Controls how locally each training observation influences the RBF decision boundary. Larger values can produce more complex boundaries.
+
+  ```{r}
+  # Generate coordinate grid
+  grid_nonlinear <- expand.grid(
+    x = seq(-3.5, 3.5, length.out = 200),
+    y = seq(-3.5, 3.5, length.out = 200)
+  )
+
+  # Predict classes and decision values
+  pred <- predict(
+    svm_nonlinear_model,
+    grid_nonlinear,
+    decision.values = TRUE
+  )
+
+  grid_nonlinear$Class <- pred
+
+  grid_nonlinear$decision <- as.vector(
+    attr(pred, "decision.values")
+  )
+
+  # Extract support vectors
+  support_vectors <- svm_nonlinear[
+    svm_nonlinear_model$index, 
+  ]
+
+  # Visualization
+  ggplot() +
+
+    # Classification regions
+    geom_raster(
+      data = grid_nonlinear,
+      aes(x = x, y = y, fill = Class),
+      alpha = 0.2
+    ) +
+
+    # Margin boundaries
+    geom_contour(
+      data = grid_nonlinear,
+      aes(x = x, y = y, z = decision),
+      breaks = c(-1, 1),
+      linetype = "dashed",
+      color = "black"
+    ) +
+
+    # Decision boundary
+    geom_contour(
+      data = grid_nonlinear,
+      aes(x = x, y = y, z = decision),
+      breaks = 0,
+      color = "black",
+      linewidth = 1
+    ) +
+
+    # Training points
+    geom_point(
+      data = svm_nonlinear,
+      aes(x = x, y = y, color = Class),
+      size = 2
+    ) +
+
+    # Support vectors
+    geom_point(
+      data = support_vectors,
+      aes(x = x, y = y),
+      shape = 21,
+      size = 4,
+      fill = NA,
+      color = "black",
+      stroke = 1
+    ) +
+
+    scale_color_manual(
+      values = c("Red" = "red", "Blue" = "blue")
+    ) +
+
+    scale_fill_manual(
+      values = c("Red" = "red", "Blue" = "blue")
+    ) +
+
+    labs(
+      title = "Nonlinear SVM with RBF Kernel",
+      subtitle = "Decision Boundary, Margins and Support Vectors",
+      x = "Feature X",
+      y = "Feature Y"
+    ) +
+
+    coord_equal() +
+    theme_minimal()
+  ```
+
+## Compare linear and nonlinear SVM
+
+We can train both models on the same data and compare their training accuracy.
+
+```{r}
+# Linear SVM
+linear_model <- svm(
+  Class ~ x + y,
+  data = svm_nonlinear,
+  kernel = "linear",
+  cost = 10,
+  scale = FALSE
+)
+
+# Predictions
+linear_pred <- predict(linear_model, svm_nonlinear)
+
+nonlinear_pred <- predict(
+  svm_nonlinear_model,
+  svm_nonlinear
+)
+
+# Training accuracy
+linear_accuracy <- mean(
+  linear_pred == svm_nonlinear$Class
+)
+
+nonlinear_accuracy <- mean(
+  nonlinear_pred == svm_nonlinear$Class
+)
+
+# Compare results
+data.frame(
+  Model = c("Linear SVM", "Nonlinear SVM"),
+  Accuracy = c(linear_accuracy, nonlinear_accuracy)
+)
+```
+
+Because the classes form a circular pattern, we expect the nonlinear SVM to achieve higher training accuracy. For a more reliable comparison, evaluate both models on a separate test dataset.
+
+## ##Interpretation
+
+A nonlinear Support Vector Machine is used when the relationship between classes cannot be separated effectively by a straight line. In this example, we created a dataset containing two classes, red and blue, based on their x and y coordinates. The red observations are concentrated near the center, while the blue observations surround them. A linear SVM would have difficulty separating these classes because the decision boundary is circular. By using the radial basis function (RBF) kernel, the nonlinear SVM can learn a curved decision boundary. The support vectors help determine the boundary, and the model can classify new observations based on their positions.
+
+The key difference: A linear SVM creates a straight decision boundary in the original feature space, whereas an RBF SVM can create a curved decision boundary through the kernel method.
+
+**#Conclusion**
+
+So to recap, Support Vector Machines are a subclass of supervised classifiers that attempt to partition a feature space into two or more groups. They achieve this by finding an optimal means of separating such groups based on their known class labels:
+
+- In simpler cases the separation "boundary" is **linear**, leading to groups that are split up by lines (or planes) in high-dimensional spaces.
+
+- In more complicated cases (where groups are not nicely separated by lines or planes), SVMs are able to carry out **non-linear** partitioning. This is achieved by means of a **kernel** function.
+
+- Ultimately, this makes them very sophisticated and capable classifiers, but at the usual expense that they can be prone to **overfitting**.
+
+Personally, I think SVMs are great classifiers for specific situations when the groups are clearly separated. They also do a great job when your data is non-linearly separated. You could transform data to linearly separate it, or you can have SVMs convert the data and linearly separate the two classes right out of the box. This is one of the main reasons to use SVMs. You don’t have to transform non-linear data yourself. One downside to SVMs is the black box nature of these functions. The use of kernels to separate non-linear data makes them difficult (if not impossible) to interpret. Understanding them will give you an alternative to GLMs and decision trees for classification. I hope this tutorial gives you a broader view of the SVM panorama and will allow you to understand these machines better.
+
+##References
+
+**Support vector machines**
+
+- StatQuest: Support Vector Machines, Part 1 (Main Ideas): the intuition for margins and kernels, with follow-ups on the polynomial and radial kernels. It explains classification, so treat it as background and translate it to numeric prediction.
+
+- MIT OpenCourseWare 6.034, Lecture 16: Support Vector Machines: the math behind it, if someone wants the derivation. It's classification-focused, so background only. (Also in the previous sample deck.)
+
+- Support Vector Regression (Saed Sayad): a short page on the regression version, the one APM covers.
+
+- DataCamp: Support Vector Machines in R: good for the kernel picture and R code, but it's about classification with e1071, so the regression side needs kernlab as in APM.
+
+- kernlab on CRAN, with the original paper by Karatzoglou et al. (2004) and the tutorial on support vector regression by Smola & Schölkopf (2004), both in guide section 11.

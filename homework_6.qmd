@@ -1,0 +1,945 @@
+---
+title: "Arima Modeling"
+author: "Guibril Ramde"
+format:
+  html: default
+  pdf: default
+editor: visual
+---
+
+## Homework 6
+
+**9.1.**
+
+**9.1(a). Explain the differences among the figures.**
+
+The ACF plots show the autocorrelations of white noise series with different sample sizes. The series containing 36 observations has wider confidence limits than the series containing 360 observations. This occurs because the confidence limits depend on the number of observations and become narrower as the sample size increases. For white noise, most autocorrelations are expected to fall within the confidence limits, although a few may fall outside by chance. Therefore, the plots can be used to assess whether the series exhibit significant autocorrelation.
+
+**9.1(b). Why are the critical values at different distances from the mean of zero? Why are the autocorrelations different in each figure when they each refer to white noise?**
+
+The critical values are at different distances from zero because the three white noise series have different sample sizes. The confidence limits are calculated using approximately ±1.96/√T, where T represents the number of observations. As the sample size increases, the confidence limits become narrower because the estimated autocorrelations become more precise. Although all three series represent white noise, their sample autocorrelations are different because each series contains different randomly generated observations. The theoretical autocorrelation of white noise is zero at all nonzero lags, but the sample autocorrelations may fluctuate around zero due to random variation. With larger sample sizes, these fluctuations generally become smaller, explaining why the autocorrelations in the third figure are closer to zero than those in the first figure.
+
+**9.2 A classic example of a non-stationary series are stock prices. Plot the daily closing prices for Amazon stock (contained in `gafa_stock`), along with the ACF and PACF. Explain how each plot shows that the series is non-stationary and should be differenced.**
+
+```{r}
+library(fpp3)
+library(tidyverse)
+library(ggplot2)
+
+
+amazon_closing <- gafa_stock |>
+  filter(Symbol == "AMZN")
+
+amazon_closing |> autoplot(Close) + labs(title = "AMAZON Daily Closing Price", y ="Close", x = "Date")
+
+```
+
+```{r}
+amazon_closing |>
+  filter(!is.na(Close)) |>
+  ACF(Close) |> autoplot() + labs(subtitle = "AMAZON Closing Stock Price IN ACF")
+amazon_closing |>
+  PACF(Close) |> autoplot() + labs(subtitle = "AMAZON Closing Stock Price IN PACF")
+
+amazon_closing |>
+  gg_tsdisplay(difference(Close), plot_type = 'partial' )
+
+```
+
+```{r}
+# KPSS test on original series
+amazon_closing |>
+  features(Close, unitroot_kpss)
+
+# KPSS test after first differencing
+amazon_closing |>
+  mutate(diff_Close = difference(Close)) |>
+  features(diff_Close, unitroot_kpss)
+
+# Plot original series and differenced series separately
+amazon_closing |>
+  autoplot(Close) +
+  labs(title = "Original Amazon Closing Prices")
+
+amazon_closing |>
+  autoplot(difference(Close)) +
+  labs(title = "First Difference of Amazon Closing Prices")
+```
+
+```{r}
+# Analyzing log return 
+amazon_closing |>
+  mutate(
+    log_return = difference(log(Close))
+  ) |>
+  gg_tsdisplay(log_return, plot_type = "partial")
+```
+
+**##Interpretation:** The ACF plot of Amazon's daily closing stock prices shows autocorrelations that decrease slowly as the lag increases. This suggests that the original series is non-stationary. The PACF plot may show a strong autocorrelation at the first lag, indicating that the current stock price is strongly related to its previous value. To make the series stationary, first-order differencing can be applied. The ACF and PACF of the differenced series can then be examined to determine whether the trend has been removed and whether any significant autocorrelation remains.
+
+**9.3 For the following series, find an appropriate Box-Cox transformation and order of differencing in order to obtain stationary data.**
+
+a.  **Turkish GDP from `global_economy`.**
+
+    ```{r}
+    global_economy |>
+      distinct(Country)
+
+    turkish_economy <- global_economy |>
+      filter(Country == "Turkey")
+
+    turkish_economy |>
+      autoplot( GDP) + labs(title = "Turkish GDP")
+
+
+    lambda <- turkish_economy |>
+      features(GDP, features = guerrero) |>
+      pull(lambda_guerrero)
+
+
+    turkish_box_cox_trans <- turkish_economy |>
+      mutate(box_cox_GDP = box_cox(GDP, lambda = lambda))
+
+    turkish_box_cox_trans |>
+      autoplot(box_cox_GDP) + labs(title = "Box-Cox Transformation Turkish GDP",
+                                   y = "Transformed GDP")
+
+    difference_trans <- turkish_box_cox_trans |>
+      mutate(diff_GDP = difference(box_cox_GDP))
+
+
+    difference_trans |>
+      filter(!is.na(diff_GDP)) |>
+      autoplot(diff_GDP) + labs(title = "First Difference Transformation Turkish GDP")
+
+
+    difference_trans |>
+      features(diff_GDP, unitroot_kpss)
+
+
+    difference_trans |>
+      ACF(diff_GDP) |>
+      autoplot()
+
+    ```
+
+    **##Interpretation:**
+
+    The original Turkish GDP series exhibits a strong upward trend, suggesting non-stationarity. A Box-Cox transformation was applied to stabilize the variation, followed by first-order differencing to remove the trend. After differencing, the series fluctuates around a relatively stable level without a clear upward or downward trend. The KPSS test returned a p-value of 0.1, which is greater than 0.05, so we fail to reject the null hypothesis of stationarity. The ACF plot also shows no obvious persistent autocorrelation. Therefore, first-order differencing appears sufficient, and the selected order is d = 1.
+
+b.  **Accommodation takings in the state of Tasmania from `aus_accommodation`.**
+
+    ```{r}
+    aus_accommodation |>
+      distinct(State)
+
+    tasmania_acc <- aus_accommodation |>
+      filter(State == "Tasmania")
+
+    tasmania_acc |>
+      autoplot(Takings) + labs(title = "Accommodation Takings In The State Of Tasmania")
+
+    #Using box-cox
+
+    lambda <- tasmania_acc |>
+      features(Takings, guerrero) |>
+      pull(lambda_guerrero)
+
+    tasmania_acc_boxcox <- tasmania_acc |>
+      mutate(box_cox_takings =  box_cox(Takings, lambda = lambda))
+
+    tasmania_acc_boxcox |>
+      filter(!is.na(box_cox_takings)) |>
+      autoplot(box_cox_takings) + labs(title = "Box-Cox Transformation of Tasmania Takings Accommodation",
+                                       y = "Transformed Takings")
+
+    diff_tasmania <- tasmania_acc_boxcox |>
+      mutate(
+        diff_tasm = difference(box_cox_takings),
+        seasonal_diff = difference(box_cox_takings, lag = 4),
+        combined_diff = difference(seasonal_diff))
+
+    diff_tasmania |>
+      filter(!is.na(diff_tasm)) |>
+      autoplot(diff_tasm) +labs(title = "First Difference Transformed of Tasmaina Takings",
+                                y = "First Difference")
+
+    diff_tasmania |> 
+      filter(!is.na(seasonal_diff)) |>
+      autoplot(seasonal_diff) +labs(title = "Seasonal Differencing Transformed of Tasmaina Takings",
+                                    y = "Seasonal Differencing")
+
+    diff_tasmania |>
+      filter(!is.na(combined_diff)) |>
+      gg_tsdisplay(combined_diff, plot_type = "partial")
+
+
+    diff_tasmania |>
+      features(diff_tasm, unitroot_kpss)
+
+    diff_tasmania |> 
+      features(seasonal_diff, unitroot_kpss)
+
+    diff_tasmania |>
+      features(combined_diff, unitroot_kpss)
+
+    diff_tasmania |>
+      ACF(diff_tasm) |> autoplot()
+
+    ```
+
+**##Interpretation:**
+
+The original Tasmania accommodation takings series exhibits an upward trend and strong quarterly seasonality. After applying the Box-Cox transformation, first-order differencing removes much of the trend, but a strong seasonal pattern remains. Seasonal differencing at lag 4 reduces this repeating pattern. Therefore, seasonal differencing is necessary to investigate, and the seasonal and combined differenced series should be compared to determine whether an additional first difference is required.
+
+**C. Monthly sales from `souvenirs`.**
+
+```{r}
+# Visualization of the orignal data
+souvenirs |>
+  autoplot(Sales) + labs(title = "Monthly Sales")
+
+# Box-Cox transformation
+lambda <- souvenirs |>
+  features(Sales, guerrero) |>
+  pull(lambda_guerrero)
+
+souvenirs_trans <- souvenirs |>
+  mutate(
+    box_cox_sales = box_cox(Sales, lambda)
+  )
+
+# Compare different differencing approaches
+souvenirs_diff <- souvenirs_trans |>
+  mutate(
+    first_diff = difference(box_cox_sales),
+    seasonal_diff = difference(box_cox_sales, lag = 12),
+    combined_diff = difference(seasonal_diff)
+  )
+# Plot First differncing
+souvenirs_diff |>
+  filter(!is.na(first_diff)) |>
+  autoplot(first_diff) + labs(title = "First Differencing Of Souvenirs Sales")
+
+# Plot Seasonal differncing
+souvenirs_diff |>
+  filter(!is.na(seasonal_diff)) |>
+  autoplot(seasonal_diff) + labs(title = "Seasonal Differencing Of Souvenirs Sales")
+
+
+# Plot combined differencing
+souvenirs_diff |>
+  filter(!is.na(combined_diff)) |>
+  gg_tsdisplay(combined_diff, plot_type = "partial")
+
+# KPSS test
+souvenirs_diff |>
+  features(combined_diff, unitroot_kpss)
+
+souvenirs_diff |>
+  features(seasonal_diff, unitroot_ndiffs)
+
+souvenirs_diff |>
+  features(seasonal_diff, unitroot_kpss)
+
+souvenirs_trans |>
+  features(box_cox_sales, unitroot_nsdiffs)
+
+# ACF
+souvenirs_diff |>
+  ACF(combined_diff) |>
+  autoplot()
+
+souvenirs_diff |>
+  filter(!is.na(seasonal_diff)) |>
+  gg_tsdisplay(
+    seasonal_diff,
+    plot_type = "partial"
+  )
+
+```
+
+**##Interpretation:**
+
+The original souvenirs sales series exhibits an upward trend and strong annual seasonality. A Box-Cox transformation was applied to stabilize the variation. The seasonal unit root test suggested one seasonal difference (D = 1), while the nonseasonal differencing test applied after seasonal differencing suggested no additional differences (d = 0). Therefore, seasonal differencing at lag 12 appears sufficient based on these tests. The KPSS test of the combined-differenced series returned a statistic of 0.0381 and a p-value of 0.1, indicating insufficient evidence to reject stationarity for that series. A separate KPSS test on the seasonal-only differenced series is needed to support the final selection.
+
+**9.4. For the `souvenirs` data, write down the differences you chose above using backshift operator notation.**
+
+For the souvenirs monthly sales data, seasonal differencing with a lag of 12 was selected to remove annual seasonality. The backshift operator (B) shifts an observation backward by one period, while (B\^{12}) shifts it backward by 12 months.
+
+The differencing operation is:
+
+\[\
+(1-B\^{12})z_t=z_t-z\_{t-12}\
+\]
+
+where (z_t) represents the Box-Cox transformed sales. The selected differencing orders are (d=0) and (D=1), with a seasonal period of (m=12).
+
+**9.5. For your retail data (from Exercise 7 in [Section 2.10](https://otexts.com/fpp3/graphics.html#sec-graphics-exercises)), find the appropriate order of differencing (after transformation if necessary) to obtain stationary data.**
+
+```{r}
+set.seed(12345678)
+myseries <- aus_retail |>
+  filter(`Series ID` == sample(aus_retail$`Series ID`, 1))
+
+
+myseries |> autoplot(Turnover) + labs(title = "Australia Retail Series")
+
+# Use box_cox transformation
+
+lambda <- myseries |>
+  features(Turnover, guerrero) |>
+  pull(lambda_guerrero)
+
+box_cox_myseries <- myseries |>
+  mutate(box_cox_series = box_cox(Turnover, lambda))
+
+# Plot box cox transformation
+box_cox_myseries |> autoplot(box_cox_series) + labs(title = "Box Cox Transformation of Australia Retail")
+
+# First differencing
+
+myseries_diff <-box_cox_myseries |>
+  mutate(
+    first_diff = difference(box_cox_series),
+    seasonal_diff = difference(box_cox_series, lag = 12),
+    combined_diff = difference(seasonal_diff))
+
+# Plot differencing
+myseries_diff |>   
+  filter(!is.na(first_diff)) |>
+  autoplot(first_diff) + labs(title = "First Differencing Of Australia Retail Series")
+
+myseries_diff |>
+  filter(!is.na(seasonal_diff)) |>
+  autoplot(seasonal_diff) + labs(title = "Seasonal Differencing Of Australia Retail Series")
+
+# ACF PACF
+myseries_diff |>
+  filter(!is.na(combined_diff)) |>
+  gg_tsdisplay(combined_diff, plot_type = "partial")
+
+myseries_diff |>
+  features(combined_diff, unitroot_kpss)
+
+myseries_diff |>
+  ACF(combined_diff)
+
+
+
+```
+
+**##Interpretation:**
+
+The original Australian retail series exhibits an upward trend and strong monthly seasonality. A Box-Cox transformation was applied to stabilize the variation. First-order differencing reduces the trend, but the resulting series still shows strong seasonal fluctuations. Seasonal differencing at lag 12 reduces the repeating seasonal pattern. The combined differenced series fluctuates more consistently around zero, suggesting improved stationarity. The KPSS test and ACF plot can be used to evaluate whether both first-order and seasonal differencing are necessary.
+
+**9.6. Simulate and plot some data from simple ARIMA models.**
+
+a.  **Use the following R code to generate data from an AR(1) model with** ϕ1=0.6 **and** σ2=1**. The process starts with** y1=0
+
+    ```{r}
+    set.seed(123)
+    y <- numeric(100)
+    e <- rnorm(100)
+    for (i in 2:100) {
+      y[i] <- 0.6 * y[i - 1] + e[i]
+    }
+    sim <- tsibble(idx = seq_len(100), y = y, index = idx)
+
+
+    # Generate data from AR(1) model
+    arima_sim <- sim |>
+      model(ARIMA(y, stepwise = FALSE, approx = FALSE))
+    arima_sim
+    glance(arima_sim) |> arrange(AICc) |> select(.model:BIC)
+
+    arima_sim |> gg_tsresiduals()
+
+    ```
+
+**##Interpretation:**
+
+The simulated series was generated using an AR(1) process with an autoregressive coefficient of 0.6. The fitted ARIMA(1,0,0) model corresponds to \\(p=1\\), \\(d=0\\), and \\(q=0\\). The model has an AICc of approximately 269.62 and a BIC of 274.71. The residual diagnostics can be examined to determine whether significant autocorrelation remains after fitting the model.
+
+**b. Produce a time plot for the series. How does the plot change as you change** ϕ1**?**
+
+```{r}
+sim |> autoplot(y) + labs(title = "Simulated Simple AR(1) Model",
+                          x = "Time",
+                          y = "Simulated Values")
+```
+
+**How does the plot change as you change** ϕ1**?**
+
+```{r}
+set.seed(123)
+
+e <- rnorm(100)
+
+simulate_ar1 <- function(phi) {
+  y <- numeric(100)
+  
+  for (i in 2:100) {
+    y[i] <- phi * y[i - 1] + e[i]
+  }
+  
+  y
+}
+
+sim_compare <- tibble(
+  idx = rep(1:100, 3),
+  phi = rep(c("0.2", "0.6", "0.9"), each = 100),
+  y = c(
+    simulate_ar1(0.2),
+    simulate_ar1(0.6),
+    simulate_ar1(0.9)
+  )
+)
+
+ggplot(sim_compare, aes(x = idx, y = y)) +
+  geom_line() +
+  facet_wrap(~ phi, ncol = 1) +
+  labs(
+    title = "AR(1) Simulation with Different Phi Values",
+    x = "Time",
+    y = "Simulated Values"
+  )
+
+```
+
+**##Interpretation:**
+
+The time plots show that the behavior of the AR(1) process changes depending on the value of \\(\\phi_1\\). When \\(\\phi_1=0.2\\), the observations have weak autocorrelation and fluctuate more randomly around zero. When \\(\\phi_1=0.6\\), the observations exhibit greater persistence, meaning that consecutive values tend to be more similar. When \\(\\phi_1=0.9\\), the series shows stronger persistence, and shocks take longer to disappear. Therefore, as \\(\\phi_1\\) approaches 1, the AR(1) process becomes more persistent.
+
+**c. Write your own code to generate data from an MA(1) model with** θ1=0.6 **and** σ2=1**.**
+
+```{r}
+set.seed(1234)
+y <- numeric(1000)
+e <- rnorm(1000)
+for (i in 2:1000) {
+  y[i] <- e[i] + 0.6 * e[i - 1]
+}
+sim_ma <- tsibble(idx = seq_len(1000), y = y, index = idx)
+
+
+sim_ma |>
+  autoplot(y) + labs(title = "Simulated MA(1) Model",
+                     x = "Time",
+                     y = "Simulated Values")
+
+sim_ma |>
+  ACF(y) |>
+  autoplot() + labs(title = "ACF Simulated MA(1) Model")
+
+```
+
+**D. Produce a time plot for the series. How does the plot change as you change** θ1**?**
+
+```{r}
+set.seed(123)
+e <- rnorm(100)
+
+simulate_ma1 <- function(theta) {
+  y <- numeric(100)
+  
+  for (i in 2:100) {
+    y[i] <- e[i] + theta * e[i - 1]
+  }
+  
+  return(y)
+}
+
+sim_compare_ma <- tibble(
+  idx = rep(1:100, 3),
+  theta = rep(c("0.2", "0.6", "0.9"), each = 100),
+  y = c(
+    simulate_ma1(0.2),
+    simulate_ma1(0.6),
+    simulate_ma1(0.9)
+  )
+)
+
+ggplot(sim_compare_ma, aes(x = idx, y = y)) +
+  geom_line() +
+  facet_wrap(~ theta, ncol = 1) +
+  labs(
+    title = "MA(1) Simulation with Different Theta Values",
+    x = "Time",
+    y = "Simulated Values"
+  )
+```
+
+**##Interpretation:**
+
+As \\(\\theta_1\\) increases from 0.2 to 0.9, the previous error has a stronger influence on the current observation. The lag-1 autocorrelation increases over this range, while the theoretical autocorrelation remains zero beyond lag 1. Unlike an AR(1), the effect of a shock in an MA(1) lasts only through the following observation.
+
+**e. Generate data from an ARMA(1,1) model with** ϕ1=0.6θ1=0.6 **and** σ2=1**.**
+
+```{r}
+set.seed(1234)
+
+y <- numeric(1000)
+e <- rnorm(1000, mean = 0, sd = 1)
+
+for (i in 2:1000) {
+  y[i] <- 0.6 * y[i - 1] + e[i] + 0.6 * e[i - 1]
+}
+
+sim_arma <- tsibble(
+  idx = seq_len(1000),
+  y = y,
+  index = idx
+)
+
+sim_arma |>
+  autoplot(y) +
+  labs(
+    title = "Simulated ARMA(1,1) Model",
+    x = "Time",
+    y = "Simulated Values"
+  )
+```
+
+**f. Generate data from an AR(2) model with** ϕ1=−0.8**,** ϕ2=0.3 **and** σ2=1**. (Note that these parameters will give a non-stationary series.)**
+
+```{r}
+library(fpp3)
+
+set.seed(1234)
+
+y <- numeric(1000)
+e <- rnorm(1000, mean = 0, sd = 1)
+
+for (i in 3:1000) {
+  y[i] <- -0.8 * y[i - 1] + 0.3 * y[i - 2] + e[i]
+}
+
+sim_ar2 <- tsibble(
+  idx = seq_len(1000),
+  y = y,
+  index = idx
+)
+
+sim_ar2 |>
+  autoplot(y) +
+  labs(
+    title = "Simulated Non-Stationary AR(2) Model",
+    x = "Time",
+    y = "Simulated Values"
+  )
+```
+
+**g. Graph the latter two series and compare them.**
+
+```{r}
+library(fpp3)
+
+comparison <- bind_rows(
+  sim_arma |>
+    as_tibble() |>
+    mutate(Model = "ARMA(1,1)"),
+  
+  sim_ar2 |>
+    as_tibble() |>
+    mutate(Model = "AR(2)")
+)
+
+ggplot(comparison, aes(x = idx, y = y)) +
+  geom_line() +
+  facet_wrap(~ Model, ncol = 1, scales = "free_y") +
+  labs(
+    title = "Comparison of ARMA(1,1) and AR(2) Models",
+    x = "Time",
+    y = "Simulated Values"
+  )
+```
+
+**##Interpretation:**
+
+The ARMA(1,1) series fluctuates around zero without showing a persistent upward or downward trend, indicating stationary behavior. In contrast, the AR(2) series exhibits increasingly large oscillations as time progresses. This occurs because the AR(2) coefficients violate the stationarity conditions, causing the process to become explosive. Therefore, the ARMA(1,1) series maintains relatively stable variability, whereas the AR(2) series does not.
+
+**9.7 Consider `aus_airpassengers`, the total number of passengers (in millions) from Australian air carriers for the period 1970-2011.**
+
+a\. **Use `ARIMA()` to find an appropriate ARIMA model. What model was selected? Check that the residuals look like white noise. Plot forecasts for the next 10 periods.**
+
+```{r}
+air_data <- aus_airpassengers |>
+  filter(Year <= 2011)
+air_data
+fit_arima <- air_data |>
+  model(ARIMA(Passengers, stepwise = FALSE, approx = FALSE))
+fit_arima
+# Check the residuals
+fit_arima |>
+  gg_tsresiduals()
+
+report(fit_arima)
+
+# Check for white noise
+fit_arima |>
+  augment() |>
+  features(.innov, ljung_box, lag = 10, dof = 1)
+fit_arima
+
+# Plot forecast h = 10
+fc_fit_arima <- fit_arima |>
+  forecast(h = 10)
+fc_fit_arima
+
+# Plot
+
+fc_fit_arima |> autoplot(air_data) + labs(title = "10 Years forecast of Australian Carriers")
+```
+
+**##Interpretation:** The automatic ARIMA procedure selected an ARIMA(0,2,1) model for the Australian air passenger series. The model requires second-order differencing and includes one moving-average term with an estimated coefficient of -0.8756. The model has an AICc of 179.93 and a BIC of 182.99. The Ljung–Box test produced a p-value of 0.7396, which is greater than 0.05, indicating insufficient evidence of residual autocorrelation. The ten-year forecast shows continued growth in passenger numbers, while the prediction intervals widen as the forecast horizon increases.
+
+## 
+
+**b. Write the model in terms of the backshift operator.**
+
+Applying the backshift operator:
+
+\\\[
+\\boxed{y_t-2y\_{t-1}+y\_{t-2}=\\varepsilon_t-0.8963\\varepsilon\_{t-1}}
+\\\]
+
+**##Interpretation:** The selected ARIMA(0,2,1) model can be expressed using the backshift operator as \\((1-B)\^2y_t=(1-0.8963B)\\varepsilon_t\\). The operator \\((1-B)\^2\\) represents second-order differencing, which removes non-stationarity from the original series. The moving-average component uses the current error and the previous error, with an estimated coefficient of -0.8963. Therefore, the model describes the second difference of passenger numbers as a function of current and previous random shocks.
+
+**c. Plot forecasts from an ARIMA(0,1,0) model with drift and compare these to part a**
+
+```{r}
+fit_arima_drif <- air_data |>
+  model(ARIMA(Passengers ~ 1 + pdq(0, 1, 0)))
+fit_arima_drif
+
+report(fit_arima_drif)
+# Check for white noise
+fit_arima_drif |>
+  augment() |>
+  features(.innov, ljung_box, lag = 10, dof = 0)
+
+# Plot forecast h = 10
+fc_fit_arima_drif <- fit_arima_drif |>
+  forecast(h = 10)
+fc_fit_arima_drif
+# Residuals plot
+fit_arima_drif |>
+  gg_tsresiduals()
+
+# Plot
+
+
+fc_fit_arima_drif |> autoplot(air_data) + labs(title = "10 Years forecast of Australian Carriers")
+```
+
+```{r}
+comparison_models <- air_data |>
+  model(
+    ARIMA_021 = ARIMA(
+      Passengers,
+      stepwise = FALSE,
+      approx = FALSE
+    ),
+    ARIMA_Drift = ARIMA(
+      Passengers ~ 1 + pdq(0, 1, 0)
+    )
+  )
+
+comparison_models |>
+  glance() |>
+  select(.model, AIC, AICc, BIC) |>
+  arrange(AICc)
+
+comparison_fc <- comparison_models |>
+  forecast(h = 10)
+
+comparison_fc |>
+  autoplot(air_data, level = NULL) +
+  labs(
+    title = "ARIMA Forecast Comparison",
+    subtitle = "ARIMA(0,2,1) vs ARIMA(0,1,0) with Drift",
+    x = "Year",
+    y = "Passengers (millions)",
+    colour = "Model"
+  ) +
+  theme(
+    legend.position = "bottom"
+  )
+```
+
+**##Interpretation:**
+
+The forecast comparison shows that both ARIMA(0,2,1) and ARIMA(0,1,0) with drift predict continued growth in Australian air passenger numbers over the next ten years. However, the ARIMA(0,2,1) model produces higher forecasts, reaching approximately 94 million passengers, while the drift model forecasts approximately 86 million. The difference becomes larger as the forecast horizon increases. This occurs because the ARIMA(0,2,1) model extrapolates the estimated recent growth rate, whereas the ARIMA(0,1,0) with drift assumes a constant average annual increase. Both models provide reasonable upward forecasts, but further evaluation would be needed to determine which model is more accurate.
+
+**d. Plot forecasts from an ARIMA(2,1,2) model with drift and compare these to parts a and c. Remove the constant and see what happens.**
+
+```{r}
+fit_arima_drift <- air_data |>
+  model(ARIMA(Passengers ~ 1 + pdq(2, 1, 2)))
+fit_arima_drift
+
+report(fit_arima_drift)
+# Check for white noise
+fit_arima_drift |>
+  augment() |>
+  features(.innov, ljung_box, lag = 10, dof = 0)
+
+# Plot forecast h = 10
+fc_fit_arima_drift <- fit_arima_drift |>
+  forecast(h = 10)
+fc_fit_arima_drift
+# Residuals plot
+fit_arima_drift |>
+  gg_tsresiduals()
+
+# Plot
+
+
+fc_fit_arima_drift |> autoplot(air_data) + labs(title = "10 Years forecast of Australian Carriers")
+```
+
+```{r}
+comparison_models2 <- air_data |>
+  model(
+    ARIMA_021 = ARIMA(
+      Passengers,
+      stepwise = FALSE,
+      approx = FALSE
+    ),
+    
+    ARIMA_010_Drift = ARIMA(
+      Passengers ~ 1 + pdq(0, 1, 0)
+    ),
+    
+    ARIMA_212_Drift = ARIMA(
+      Passengers ~ 1 + pdq(2, 1, 2)
+    ),
+    
+    ARIMA_212_NoDrift = ARIMA(
+      Passengers ~ 0 + pdq(2, 1, 2)
+    )
+  )
+
+# Compare model selection criteria
+comparison_models2 |>
+  glance() |>
+  select(.model, AIC, AICc, BIC) |>
+  arrange(AICc)
+
+# Forecast
+comparison_fc2 <- comparison_models2 |>
+  forecast(h = 10)
+
+
+comparison_models2 |>
+  augment() |>
+  features(.innov, ljung_box, lag = 10, dof = 4)
+# Plot
+comparison_fc2 |>
+  autoplot(air_data, level = NULL) +
+  labs(
+    title = "ARIMA Forecast Comparison",
+    subtitle = "Models with and without drift",
+    x = "Year",
+    y = "Passengers (millions)",
+    colour = "Model"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+**##Interpretation:**
+
+Removing the constant changes the long-run forecast behavior. For a stationary differenced ARMA component, the no-drift model's forecasts eventually flatten, while the drift model can maintain a linear trend.
+
+**e. Plot forecasts from an ARIMA(0,2,1) model with a constant. What happens?**
+
+```{r}
+fit_arima_constant <- air_data |>
+  model(ARIMA(Passengers ~ 1 + pdq(0, 2, 1)))
+fit_arima_constant
+# Check the residuals
+fit_arima_constant |>
+  gg_tsresiduals()
+
+report(fit_arima_constant)
+
+# Check for white noise
+fit_arima_constant |>
+  augment() |>
+  features(.innov, ljung_box, lag = 10, dof = 2)
+
+# Plot forecast h = 10
+fc_fit_arima <- fit_arima_constant |>
+  forecast(h = 10)
+fc_fit_arima
+
+# Plot
+
+fc_fit_arima |> autoplot(air_data) + labs(title = "10 Years forecast of Australian Carriers")
+```
+
+**##Interpretation:**
+
+When attempting to fit an ARIMA(0,2,1) model with a constant, the software produces a warning because including a constant with second-order differencing introduces a quadratic trend in the forecasts. The `ARIMA()` function restricts this specification and may remove the constant. Consequently, the resulting forecasts may resemble those from the ARIMA(0,2,1) model without a constant. The warning indicates a model specification restriction rather than simply a decrease in the Ljung–Box p-value.
+
+**8 For the United States GDP series (from `global_economy`)**
+
+**a. if necessary, find a suitable Box-Cox transformation for the data;**
+
+```{r}
+usa_gdp <- global_economy |>
+  filter(Country == "United States")
+
+# Plot the original data
+usa_gdp |> autoplot(GDP) + labs(title = "USA GDP")
+# Find a box cox transformation
+lambda <- usa_gdp |>
+  features(GDP, guerrero) |>
+  pull(lambda_guerrero)
+lambda
+box_cox_trans_usa <- usa_gdp |>
+  mutate(box_cox_usa = box_cox(GDP, lambda))
+
+box_cox_trans_usa |> autoplot(box_cox_usa) + labs(title = "Box Cox Transformation of USA GDP")
+```
+
+**##Interpretation:**
+
+The original United States GDP series exhibits a strong upward trend, indicating that GDP has increased substantially over time. A Box-Cox transformation was applied using the Guerrero method to identify a suitable transformation parameter. The transformation aims to stabilize the variance and make the series more appropriate for time series modeling. Further differencing may still be required to achieve stationarity.
+
+**b. fit a suitable ARIMA model to the transformed data using `ARIMA()`;**
+
+```{r}
+fit_usa_arima <- box_cox_trans_usa |>
+  model(ARIMA(box_cox_usa, stepwise = FALSE, approx = FALSE))
+fit_usa_arima
+
+report(fit_usa_arima)  
+  
+```
+
+**c. try some other plausible models by experimenting with the orders chosen;**
+
+```{r}
+usa_models <- box_cox_trans_usa |>
+  model(
+    Auto_ARIMA = ARIMA(
+      box_cox_usa,
+      stepwise = FALSE,
+      approx = FALSE
+    ),
+    ARIMA_111 = ARIMA(
+      box_cox_usa ~ 1 + pdq(1, 1, 1)
+    ),
+    ARIMA_001 = ARIMA(
+      box_cox_usa ~ 1 + pdq(0, 0, 1)
+    ),
+    ARIMA_200 = ARIMA(
+      box_cox_usa ~ 1 + pdq(2, 0, 0)
+    ),
+    ARIMA_210 = ARIMA(
+      box_cox_usa ~ 1 + pdq(2, 1, 0)
+    )
+  )
+
+usa_models |>
+  glance() |>
+  select(.model, AIC, AICc, BIC) |>
+  arrange(AICc)
+
+```
+
+##Interpretation:
+
+By trying different models their AICc value are higher so keeping ARIMA(1, 1, 0) is best
+
+**d. choose what you think is the best model and check the residual diagnostics;**
+
+```{r}
+fit_usa_arima <- box_cox_trans_usa |>
+  model(ARIMA(box_cox_usa, stepwise = FALSE, approx = FALSE))
+fit_usa_arima
+
+report(fit_usa_arima)  
+
+fit_usa_arima |> gg_tsresiduals()
+fit_usa_arima |>
+  augment() |>
+  features(
+    .innov,
+    ljung_box,
+    lag = 10,
+    dof = 1
+  )
+```
+
+**##Interpretation:**
+
+The residual diagnostics for the selected ARIMA(1,1,0) model show that the residuals fluctuate around zero without a clear systematic pattern. The ACF plot indicates that the residual autocorrelations are within the approximate 95% significance bounds, suggesting that little serial correlation remains. However, the histogram is not perfectly symmetric, and several unusual residuals are present. The Ljung–Box test provides an additional assessment of p value = 0.9232381.
+
+**e. produce forecasts of your fitted model. Do the forecasts look reasonable?**
+
+```{r}
+fit_usa_arima <- box_cox_trans_usa |>
+  model(ARIMA(box_cox_usa, stepwise = FALSE, approx = FALSE))
+fit_usa_arima
+
+report(fit_usa_arima)  
+
+fit_usa_arima |> gg_tsresiduals()
+fc_usa <- fit_usa_arima |>
+  forecast(h = 4)
+
+fc_usa |>
+  autoplot(box_cox_trans_usa) +
+  labs(
+    title = "Four-Year Forecast of US GDP",
+    x = "Year",
+    y = "Box-Cox Transformed GDP"
+  )
+```
+
+**##Interpretattion:**
+
+The four-year forecast from the ARIMA model indicates that United States GDP is expected to continue increasing. The forecast follows the historical upward trend, suggesting continued economic growth under the model assumptions. The 80% and 95% prediction intervals become wider over time, indicating increasing uncertainty. Overall, the forecasts appear reasonable based on the historical behavior of the series, although unexpected economic events could cause actual GDP to differ from the predictions.
+
+**f. compare the results with what you would obtain using `ETS()` (with no transformation).**
+
+```{r}
+# Fit both models
+usa_comparison <- usa_gdp |>
+  model(
+    ARIMA_BoxCox = ARIMA(
+      box_cox(GDP, lambda),
+      stepwise = FALSE,
+      approx = FALSE
+    ),
+    ETS_Original = ETS(GDP)
+  )
+
+# Generate 4-year forecasts
+usa_fc <- usa_comparison |>
+  forecast(h = 4)
+
+# Compare point forecasts on original GDP scale
+usa_fc |>
+  autoplot(usa_gdp, level = NULL) +
+  labs(
+    title = "US GDP Forecast: ARIMA vs ETS",
+    subtitle = "Four-Year Forecast Comparison",
+    x = "Year",
+    y = "GDP (US dollars)",
+    colour = "Model"
+  ) +
+  theme(legend.position = "bottom")
+
+usa_fc |>
+  as_tibble() |>
+  select(.model, Year, .mean)
+
+```
+
+**##Interpretation:**
+
+Both the ARIMA and ETS models forecast continued growth in United States GDP over the next four years. The ARIMA model incorporates first-order differencing and an autoregressive term, while the ETS model represents the series through exponential smoothing components. Comparing their forecasts on the original GDP scale makes it possible to evaluate differences in predicted growth. The models may produce different forecast values and prediction intervals because they represent the underlying time series dynamics differently. Additional forecast accuracy testing would help determine which model provides more reliable predictions.

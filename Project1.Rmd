@@ -1,0 +1,359 @@
+---
+title: "Project 1"
+author: "Guibril Ramde"
+date: "2026-10-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#install.packages("readxl")
+library(readxl)
+library(tidyverse)
+library(fpp3)
+library(dplyr)
+```
+
+## Part A: ATM Forecast
+## The objective of this analysis is to forecast daily cash withdrawals for four ATM machines during May 2010. The dataset contains historical daily cash withdrawal records from May 1, 2009, through April 30, 2010. Cash withdrawals are measured in hundreds of dollars. The analysis begins with data preparation and exploratory data analysis to identify trends, seasonal patterns, missing values, and unusual observations. Different forecasting methods will then be evaluated to determine which approaches provide reliable predictions for each ATM. The final forecasts will be used to estimate the expected cash requirements for May 2010 and provide information that may support ATM cash management and replenishment planning.
+
+## Import and data preparation
+
+```{r cars}
+
+load_ATM_data <- read_excel("ATM624Data.xlsx") |>
+  mutate(DATE = as.Date(DATE, origin = "1899-12-30"))
+
+tsibble_ATM_data <- load_ATM_data |>
+  filter(!is.na(ATM)) |>
+  as_tsibble(key = ATM, index = DATE)
+
+glimpse(tsibble_ATM_data)
+range(tsibble_ATM_data$DATE)
+
+```
+##Interpretation:After importing and preparing the dataset, we obtained 1,460 observations and three variables: DATE, ATM, and Cash. The dataset contains four ATM machines, each with 365 daily observations from May 1, 2009, through April 30, 2010. The DATE variable was converted from Excel's numeric date format into R's Date format. The dataset was then converted into a tsibble, using ATM as the key and DATE as the time index.
+
+##Exploratory data analysis
+```{r}
+# Plot the four ATMs
+tsibble_ATM_data |>
+  autoplot(Cash) +
+  facet_wrap(vars(ATM), scales = "free_y") +
+  labs(
+    title = "Daily ATM Cash Withdrawals",
+    x = "Date",
+    y = "Cash (Hundreds of Dollars)"
+  )
+
+# Descriptive statistics
+ATM_summary <- tsibble_ATM_data |>
+  as_tibble() |>
+  group_by(ATM) |>
+  summarise(
+    Start = min(DATE),
+    End = max(DATE),
+    Observations = n(),
+    Missing = sum(is.na(Cash)),
+    Zeros = sum(Cash == 0, na.rm = TRUE),
+    Maximum = max(Cash, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ATM_summary
+
+# Check missing dates
+has_gaps(tsibble_ATM_data)
+scan_gaps(tsibble_ATM_data)
+```
+
+##Interpretation: The time-series plots reveal different withdrawal patterns across the four ATM machines. ATM1 and ATM2 exhibit frequent fluctuations, with recurring sharp decreases that may indicate weekly seasonality. ATM3 remains at zero for most of the observation period, followed by a sudden increase in withdrawals at the end of April 2010. ATM4 has considerably larger withdrawal amounts than the other ATMs and contains an extreme observation around March 2010. These differences suggest that a single forecasting method may not be appropriate for all four machines.
+
+```{r}
+tsibble_ATM_data |>
+  gg_season(Cash, period = "week")
+
+tsibble_ATM_data |>
+  ACF(Cash) |>
+  autoplot()
+
+
+```
+##Interpretation: there may be some seasonality in ATM1 and ATM2 it show some seasonality. the ACF suggest that there is ni white noise on ATM1 and ATM2 and ATM3 but ATM4 may contain some white noise.
+
+##Investigate missing values and outliers
+```{r}
+# Missing Cash values
+tsibble_ATM_data |>
+  filter(is.na(Cash))
+
+# ATM3 nonzero withdrawals
+tsibble_ATM_data |>
+  filter(ATM == "ATM3", Cash > 0)
+
+# ATM4 largest withdrawals
+tsibble_ATM_data |>
+  filter(ATM == "ATM4") |>
+  arrange(desc(Cash)) |>
+  slice_head(n = 10)
+```
+
+## Split the data into training data and test data
+```{r}
+# Training period: May 2009 - March 2010
+train_ATM <- tsibble_ATM_data |>
+  filter(DATE < as.Date("2010-04-01"))
+
+# Testing period: April 2010
+test_ATM <- tsibble_ATM_data |>
+  filter(
+    DATE >= as.Date("2010-04-01"),
+    DATE <= as.Date("2010-04-30")
+  )
+
+# Impute missing values in training data only
+train_ATM <- train_ATM |>
+  group_by(ATM) |>
+  mutate(
+    Cash = approx(
+      x = which(!is.na(Cash)),
+      y = Cash[!is.na(Cash)],
+      xout = seq_along(Cash),
+      rule = 2
+    )$y
+  ) |>
+  ungroup()
+
+# Check training and testing periods
+range(train_ATM$DATE)
+range(test_ATM$DATE)
+
+```
+
+## Fit five forecasting models
+
+```{r}
+fit_train <- train_ATM |>
+  model(
+    NAIVE = NAIVE(Cash),
+    SNAIVE = SNAIVE(Cash ~ lag("week")),
+    DRIFT = RW(Cash ~ drift()),
+    ETS = ETS(Cash),
+    ARIMA = ARIMA(Cash)
+  )
+
+# Forecast April 2010
+fc_test <- fit_train |>
+  forecast(new_data = test_ATM)
+```
+
+##Plot models for each ATM
+
+```{r}
+# Convert forecasts to a regular tibble for plotting
+forecast_plot_data <- fc_test |>
+  as_tibble()
+
+# Actual April observations
+actual_plot_data <- test_ATM |>
+  as_tibble()
+
+ggplot() +
+  geom_line(
+    data = actual_plot_data,
+    aes(x = DATE, y = Cash),
+    color = "black",
+    linewidth = 1.2
+  ) +
+  geom_line(
+    data = forecast_plot_data,
+    aes(
+      x = DATE,
+      y = .mean,
+      color = .model
+    ),
+    linewidth = 0.8
+  ) +
+  facet_wrap(~ ATM, scales = "free_y", ncol = 2) +
+  labs(
+    title = "ATM Forecast Model Comparison - April 2010",
+    subtitle = "Black = Actual Withdrawals",
+    x = "Date",
+    y = "Cash (Hundreds of Dollars)",
+    color = "Model"
+  ) +
+  theme_minimal()
+```
+### Interpretation: Forecast Model Comparison
+
+#The forecasting models were evaluated by comparing their predictions for April 2010 with the actual cash withdrawals. For ATM1 and ATM2, ARIMA and Seasonal Naive capture the recurring fluctuations more effectively than the Naive and Random Walk with Drift models. The ARIMA model produces the lowest RMSE for both ATMs, indicating better predictive accuracy during the testing period. For ATM3, all five models predict approximately zero withdrawals, while the actual observations increase sharply near the end of April. This suggests that the historical zero withdrawals provide limited information for predicting the sudden increase in activity. For ATM4, the forecasting models produce substantially different patterns. Random Walk with Drift achieves the lowest RMSE, although its improvement over ARIMA is relatively small. Further investigation of the extreme historical observation may help determine whether the model is appropriate. Overall, the comparison suggests that different ATM machines require different forecasting approaches because their withdrawal patterns are not identical.
+
+## Compare forecasting accuracy
+
+```{r}
+accuracy_table <- accuracy(fc_test, test_ATM) |>
+  select(ATM, .model, RMSE, MAE, MAPE)
+
+# Rank models by RMSE for each ATM
+accuracy_table |>
+  as_tibble() |>
+  group_by(ATM) |>
+  arrange(RMSE, .by_group = TRUE)
+```
+
+#Visualize model accuracy
+```{r}
+accuracy_table |>
+  ggplot(aes(
+    x = .model,
+    y = RMSE,
+    fill = .model
+  )) +
+  geom_col() +
+  facet_wrap(~ ATM, scales = "free_y") +
+  labs(
+    title = "Forecast Accuracy by ATM",
+    x = "Forecasting Model",
+    y = "RMSE"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r}
+best_models <- accuracy_table |>
+  as_tibble() |>
+  group_by(ATM) |>
+  slice_min(RMSE, n = 1, with_ties = TRUE) |>
+  ungroup()
+
+best_models
+
+```
+## forecasting May 2010
+```{r}
+# Prepare complete historical data
+final_ATM_data <- tsibble_ATM_data |>
+  group_by(ATM) |>
+  mutate(
+    Cash = approx(
+      x = which(!is.na(Cash)),
+      y = Cash[!is.na(Cash)],
+      xout = seq_along(Cash),
+      rule = 2
+    )$y
+  ) |>
+  ungroup()
+
+# Fit all five models using the full history
+final_fit <- final_ATM_data |>
+  model(
+    NAIVE = NAIVE(Cash),
+    SNAIVE = SNAIVE(Cash ~ lag("week")),
+    DRIFT = RW(Cash ~ drift()),
+    ETS = ETS(Cash),
+    ARIMA = ARIMA(Cash)
+  )
+
+# Forecast May 2010
+final_fc <- final_fit |>
+  forecast(h = 31)
+```
+
+
+```{r}
+selected_models <- tibble(
+  ATM = c("ATM1", "ATM2", "ATM3", "ATM4"),
+  .model = c("ARIMA", "ARIMA", "NAIVE", "DRIFT")
+)
+
+# Keep only the selected forecasts
+selected_fc <- final_fc |>
+  as_tibble() |>
+  inner_join(
+    selected_models,
+    by = c("ATM", ".model")
+  )
+
+# Plot May forecasts
+ggplot(selected_fc,
+       aes(x = DATE, y = .mean)) +
+  geom_line(color = "steelblue", linewidth = 1) +
+  facet_wrap(~ ATM, scales = "free_y") +
+  labs(
+    title = "Selected ATM Forecasts for May 2010",
+    x = "Date",
+    y = "Forecast Cash (Hundreds of Dollars)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Historical data
+historical_data <- final_ATM_data |>
+  as_tibble()
+
+# Selected May forecasts
+forecast_data <- selected_fc
+
+ggplot() +
+  geom_line(
+    data = historical_data,
+    aes(x = DATE, y = Cash),
+    color = "gray50",
+    linewidth = 0.5
+  ) +
+  geom_line(
+    data = forecast_data,
+    aes(x = DATE, y = .mean),
+    color = "blue",
+    linewidth = 1
+  ) +
+  facet_wrap(~ ATM, scales = "free_y") +
+  labs(
+    title = "ATM Cash Withdrawal Forecasts for May 2010",
+    subtitle = "Gray = Historical Data, Blue = Forecast",
+    x = "Date",
+    y = "Cash (Hundreds of Dollars)"
+  ) +
+  theme_minimal()
+```
+### Interpretation: May 2010 Forecasts
+
+#The selected forecasting models produce different patterns for the four ATM machines during May 2010. ATM1 and ATM2 exhibit recurring weekly fluctuations, with relatively high withdrawals on certain days and sharp decreases on others. These patterns are consistent with the seasonal behavior observed in the historical data.For ATM3, the Naive model predicts a constant daily withdrawal of approximately 85 hundreds of dollars ($8,500). However, this forecast should be interpreted cautiously because the ATM recorded zero withdrawals for most of the historical period before experiencing a sudden increase at the end of April. For ATM4, the Random Walk with Drift model predicts a gradual decrease in daily cash withdrawals throughout May. Nevertheless, the extreme observation in the historical data and the relatively high forecasting errors indicate substantial uncertainty. Overall, the forecasts suggest that ATM1 and ATM2 have more predictable weekly withdrawal patterns, while ATM3 and ATM4 require greater caution when estimating future cash requirements.
+
+
+## Final Stage
+```{r}
+#install.packages("writexl")
+library(writexl)
+
+# Total expected withdrawals for May
+monthly_forecast <- selected_fc |>
+  group_by(ATM) |>
+  summarise(
+    May_Total_USD = sum(.mean) * 100,
+    .groups = "drop"
+  )
+
+monthly_forecast
+
+# Export daily forecasts
+daily_forecast <- selected_fc |>
+  transmute(
+    ATM,
+    DATE,
+    Model = .model,
+    Forecast_USD = .mean * 100
+  )
+
+write_xlsx(
+  list(
+    Daily_Forecasts = daily_forecast,
+    Monthly_Totals = monthly_forecast
+  ),
+  "ATM_May_2010_Forecasts.xlsx"
+)
+
+```
+
+

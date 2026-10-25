@@ -1,0 +1,353 @@
+---
+title: "ARIMA"
+format: html
+editor: visual
+---
+
+## Homework 6
+
+|  |
+|----|
+| EXERCISE 9 |
+| **Instructions** |
+| Do the exercises 9.1, 9.2, 9.3, 9.5, 9.6, 9.7, 9.8 in Hyndman.  Please submit both the Rpubs link as well as your .rmd file. |
+
+## 9.1
+
+**9.1(a). Explain the differences among the figures.**
+
+The ACF plots show the autocorrelations of white noise series with different sample sizes. The series containing 36 observations has wider confidence limits than the series containing 360 observations. This occurs because the confidence limits depend on the number of observations and become narrower as the sample size increases. For white noise, most autocorrelations are expected to fall within the confidence limits, although a few may fall outside by chance. Therefore, the plots can be used to assess whether the series exhibit significant autocorrelation.
+
+**9.1(b). Why are the critical values at different distances from the mean of zero? Why are the autocorrelations different in each figure when they each refer to white noise?**
+
+The critical values are at different distances from zero because the three white noise series have different sample sizes. The confidence limits are calculated using approximately ±1.96/√T, where T represents the number of observations. As the sample size increases, the confidence limits become narrower because the estimated autocorrelations become more precise. Although all three series represent white noise, their sample autocorrelations are different because each series contains different randomly generated observations. The theoretical autocorrelation of white noise is zero at all nonzero lags, but the sample autocorrelations may fluctuate around zero due to random variation. With larger sample sizes, these fluctuations generally become smaller, explaining why the autocorrelations in the third figure are closer to zero than those in the first figure.
+
+**9.2**
+
+```{r}
+library(fpp3)
+library(tidyverse)
+library(ggplot2)
+
+
+amazon_closing <- gafa_stock |>
+  filter(Symbol == "AMZN")
+
+amazon_closing |> autoplot(Close) + labs(title = "AMAZON Daily Closing Price", y ="Close", x = "Date")
+  
+```
+
+```{r}
+amazon_closing |>
+   filter(!is.na(Close)) |>
+  ACF(Close) |> autoplot() + labs(subtitle = "AMAZON Closing Stock Price IN ACF")
+amazon_closing |>
+  PACF(Close) |> autoplot() + labs(subtitle = "AMAZON Closing Stock Price IN PACF")
+
+amazon_closing |>
+  gg_tsdisplay(difference(Close), plot_type = 'partial' )
+  
+```
+
+```{r}
+# KPSS test on original series
+amazon_closing |>
+  features(Close, unitroot_kpss)
+
+# KPSS test after first differencing
+amazon_closing |>
+  mutate(diff_Close = difference(Close)) |>
+  features(diff_Close, unitroot_kpss)
+
+# Plot original series and differenced series separately
+amazon_closing |>
+  autoplot(Close) +
+  labs(title = "Original Amazon Closing Prices")
+
+amazon_closing |>
+  autoplot(difference(Close)) +
+  labs(title = "First Difference of Amazon Closing Prices")
+```
+
+```{r}
+# Analyzing log return 
+amazon_closing |>
+  mutate(
+    log_return = difference(log(Close))
+  ) |>
+  gg_tsdisplay(log_return, plot_type = "partial")
+```
+
+**##Interpretation:** The ACF plot of Amazon's daily closing stock prices shows autocorrelations that decrease slowly as the lag increases. This suggests that the original series is non-stationary. The PACF plot may show a strong autocorrelation at the first lag, indicating that the current stock price is strongly related to its previous value. To make the series stationary, first-order differencing can be applied. The ACF and PACF of the differenced series can then be examined to determine whether the trend has been removed and whether any significant autocorrelation remains.
+
+**9.3 For the following series, find an appropriate Box-Cox transformation and order of differencing in order to obtain stationary data.**
+
+a.  **Turkish GDP from global_economy**
+
+    ```{r}
+    global_economy |>
+      distinct(Country)
+
+    turkish_economy <- global_economy |>
+      filter(Country == "Turkey")
+
+    turkish_economy |>
+      autoplot( GDP) + labs(title = "Turkish GDP")
+
+
+    lambda <- turkish_economy |>
+      features(GDP, features = guerrero) |>
+      pull(lambda_guerrero)
+
+
+    turkish_box_cox_trans <- turkish_economy |>
+      mutate(box_cox_GDP = box_cox(GDP, lambda = lambda))
+      
+    turkish_box_cox_trans |>
+      autoplot(box_cox_GDP) + labs(title = "Box-Cox Transformation Turkish GDP",
+                                   y = "Transformed GDP")
+      
+    difference_trans <- turkish_box_cox_trans |>
+      mutate(diff_GDP = difference(box_cox_GDP))
+     
+
+    difference_trans |>
+       filter(!is.na(diff_GDP)) |>
+      autoplot(diff_GDP) + labs(title = "First Difference Transformation Turkish GDP")
+
+
+    difference_trans |>
+      features(diff_GDP, unitroot_kpss)
+
+
+    difference_trans |>
+      ACF(diff_GDP) |>
+      autoplot()
+
+    ```
+
+    **##Interpretation:**
+
+    The original Turkish GDP series exhibits a strong upward trend, suggesting non-stationarity. A Box-Cox transformation was applied to stabilize the variation, followed by first-order differencing to remove the trend. After differencing, the series fluctuates around a relatively stable level without a clear upward or downward trend. The KPSS test returned a p-value of 0.1, which is greater than 0.05, so we fail to reject the null hypothesis of stationarity. The ACF plot also shows no obvious persistent autocorrelation. Therefore, first-order differencing appears sufficient, and the selected order is d = 1.
+
+b.  **Accommodation takings in the state of Tasmania from `aus_accommodation`.**
+
+    ```{r}
+    aus_accommodation |>
+      distinct(State)
+
+    tasmania_acc <- aus_accommodation |>
+      filter(State == "Tasmania")
+
+    tasmania_acc |>
+      autoplot(Takings) + labs(title = "Accommodation Takings In The State Of Tasmania")
+
+    #Using box-cox
+
+    lambda <- tasmania_acc |>
+      features(Takings, guerrero) |>
+      pull(lambda_guerrero)
+
+    tasmania_acc_boxcox <- tasmania_acc |>
+      mutate(box_cox_takings =  box_cox(Takings, lambda = lambda))
+
+    tasmania_acc_boxcox |>
+       filter(!is.na(box_cox_takings)) |>
+      autoplot(box_cox_takings) + labs(title = "Box-Cox Transformation of Tasmania Takings Accommodation",
+                                                         y = "Transformed Takings")
+
+    diff_tasmania <- tasmania_acc_boxcox |>
+      mutate(
+        diff_tasm = difference(box_cox_takings),
+        seasonal_diff = difference(box_cox_takings, lag = 4),
+        combined_diff = difference(seasonal_diff))
+
+    diff_tasmania |>
+       filter(!is.na(diff_tasm)) |>
+      autoplot(diff_tasm) +labs(title = "First Difference Transformed of Tasmaina Takings",
+                                               y = "First Difference")
+
+    diff_tasmania |> 
+       filter(!is.na(seasonal_diff)) |>
+      autoplot(seasonal_diff) +labs(title = "Seasonal Differencing Transformed of Tasmaina Takings",
+                                               y = "Seasonal Differencing")
+
+    diff_tasmania |>
+       filter(!is.na(combined_diff)) |>
+      gg_tsdisplay(combined_diff, plot_type = "partial")
+
+
+    diff_tasmania |>
+      features(diff_tasm, unitroot_kpss)
+
+    diff_tasmania |> 
+      features(seasonal_diff, unitroot_kpss)
+
+    diff_tasmania |>
+      features(combined_diff, unitroot_kpss)
+
+    diff_tasmania |>
+      ACF(diff_tasm) |> autoplot()
+
+    ```
+
+    **##Interpretation:**
+
+    The original Tasmania accommodation takings series exhibits an upward trend and strong quarterly seasonality. After applying the Box-Cox transformation, first-order differencing removes much of the trend, but a strong seasonal pattern remains. Seasonal differencing at lag 4 reduces this repeating pattern. Therefore, seasonal differencing is necessary to investigate, and the seasonal and combined differenced series should be compared to determine whether an additional first difference is required.
+
+c.  **Monthly sales from `souvenirs`.**
+
+```{r}
+# Visualization of the orignal data
+souvenirs |>
+  autoplot(Sales) + labs(title = "Monthly Sales")
+
+# Box-Cox transformation
+lambda <- souvenirs |>
+  features(Sales, guerrero) |>
+  pull(lambda_guerrero)
+
+souvenirs_trans <- souvenirs |>
+  mutate(
+    box_cox_sales = box_cox(Sales, lambda)
+  )
+
+# Compare different differencing approaches
+souvenirs_diff <- souvenirs_trans |>
+  mutate(
+    first_diff = difference(box_cox_sales),
+    seasonal_diff = difference(box_cox_sales, lag = 12),
+    combined_diff = difference(seasonal_diff)
+  )
+# Plot First differncing
+souvenirs_diff |>
+   filter(!is.na(first_diff)) |>
+  autoplot(first_diff) + labs(title = "First Differencing Of Souvenirs Sales")
+  
+# Plot Seasonal differncing
+souvenirs_diff |>
+   filter(!is.na(seasonal_diff)) |>
+  autoplot(seasonal_diff) + labs(title = "Seasonal Differencing Of Souvenirs Sales")
+
+
+# Plot combined differencing
+souvenirs_diff |>
+   filter(!is.na(combined_diff)) |>
+  gg_tsdisplay(combined_diff, plot_type = "partial")
+
+# KPSS test
+souvenirs_diff |>
+  features(combined_diff, unitroot_kpss)
+
+souvenirs_diff |>
+  features(seasonal_diff, unitroot_ndiffs)
+
+souvenirs_diff |>
+  features(seasonal_diff, unitroot_kpss)
+
+souvenirs_trans |>
+  features(box_cox_sales, unitroot_nsdiffs)
+
+# ACF
+souvenirs_diff |>
+  ACF(combined_diff) |>
+  autoplot()
+
+souvenirs_diff |>
+   filter(!is.na(seasonal_diff)) |>
+  gg_tsdisplay(
+    seasonal_diff,
+    plot_type = "partial"
+  )
+  
+```
+
+**##Interpretation:**
+
+The original souvenirs sales series exhibits an upward trend and strong annual seasonality. A Box-Cox transformation was applied to stabilize the variation. The seasonal unit root test suggested one seasonal difference (D = 1), while the nonseasonal differencing test applied after seasonal differencing suggested no additional differences (d = 0). Therefore, seasonal differencing at lag 12 appears sufficient based on these tests. The KPSS test of the combined-differenced series returned a statistic of 0.0381 and a p-value of 0.1, indicating insufficient evidence to reject stationarity for that series. A separate KPSS test on the seasonal-only differenced series is needed to support the final selection.
+
+4.  **For the `souvenirs` data, write down the differences you chose above using backshift operator notation.**
+
+    For the souvenirs monthly sales data, seasonal differencing with a lag of 12 was selected to remove annual seasonality. The backshift operator (B) shifts an observation backward by one period, while (B\^{12}) shifts it backward by 12 months.
+
+    The differencing operation is:
+
+    \[\
+    (1-B\^{12})z_t=z_t-z\_{t-12}\
+    \]
+
+    where (z_t) represents the Box-Cox transformed sales. The selected differencing orders are (d=0) and (D=1), with a seasonal period of (m=12).
+
+5.  **For your retail data (from Exercise 7 in [Section 2.10](https://otexts.com/fpp3/graphics.html#sec-graphics-exercises)), find the appropriate order of differencing (after transformation if necessary) to obtain stationary data.**
+
+    ```{r}
+    set.seed(12345678)
+    myseries <- aus_retail |>
+      filter(`Series ID` == sample(aus_retail$`Series ID`, 1))
+
+
+    myseries |> autoplot(Turnover) + labs(title = "Australia Retail Series")
+
+    # Use box_cox transformation
+
+    lambda <- myseries |>
+      features(Turnover, guerrero) |>
+      pull(lambda_guerrero)
+
+    box_cox_myseries <- myseries |>
+      mutate(box_cox_series = box_cox(Turnover, lambda))
+
+    # Plot box cox transformation
+    box_cox_myseries |> autoplot(box_cox_series) + labs(title = "Box Cox Transformation of Australia Retail")
+
+    # First differencing
+
+    myseries_diff <-box_cox_myseries |>
+      mutate(
+        first_diff = difference(box_cox_series),
+        seasonal_diff = difference(box_cox_series, lag = 12),
+        combined_diff = difference(seasonal_diff))
+
+    # Plot differencing
+    myseries_diff |>   
+      filter(!is.na(first_diff)) |>
+      autoplot(first_diff) + labs(title = "First Differencing Of Australia Retail Series")
+
+    myseries_diff |>
+       filter(!is.na(seasonal_diff)) |>
+      autoplot(seasonal_diff) + labs(title = "Seasonal Differencing Of Australia Retail Series")
+
+    # ACF PACF
+    myseries_diff |>
+       filter(!is.na(combined_diff)) |>
+      gg_tsdisplay(combined_diff, plot_type = "partial")
+
+    myseries_diff |>
+      features(combined_diff, unitroot_kpss)
+
+    myseries_diff |>
+      ACF(combined_diff)
+
+
+
+    ```
+
+**##Interpretation:**
+
+The original Australian retail series exhibits an upward trend and strong monthly seasonality. A Box-Cox transformation was applied to stabilize the variation. First-order differencing reduces the trend, but the resulting series still shows strong seasonal fluctuations. Seasonal differencing at lag 12 reduces the repeating seasonal pattern. The combined differenced series fluctuates more consistently around zero, suggesting improved stationarity. The KPSS test and ACF plot can be used to evaluate whether both first-order and seasonal differencing are necessary.
+
+6.  Simulate and plot some data from simple ARIMA models.
+    a.  Use the following R code to generate data from an AR(1) model with ϕ1=0.6 and σ2=1 The process starts with y1=0.
+
+        ```{r}
+        y <- numeric(100)
+        e <- rnorm(100)
+        for (i in 2:100) {
+          y[i] <- 0.6 * y[i - 1] + e[i]
+        }
+        sim <- tsibble(idx = seq_len(100), y = y, index = idx)
+
+
+        # Generate data from AR(1) model
+        sim
+        ```
