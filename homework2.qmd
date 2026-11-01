@@ -71,7 +71,7 @@ The country with the highest GDP per capita for most of the period is Monaco. Mo
 
 ## **3.2 .For each of the following series, make a graph of the data. If transforming seems appropriate, do so and describe the effect.**
 
--   United States GDP from `global_economy`.
+- United States GDP from `global_economy`.
 
 ```{r}
 global_economy |>
@@ -98,7 +98,7 @@ global_economy |>
   
 ```
 
--   Slaughter of Victorian “Bulls, bullocks and steers” in `aus_livestock`.
+- Slaughter of Victorian “Bulls, bullocks and steers” in `aus_livestock`.
 
 ```{r}
 aus_livestock |>
@@ -135,7 +135,7 @@ we could use a log transformation for aus_livestock observation over time, and b
 components(dcmp) |> autoplot()
 ```
 
--   Victorian Electricity Demand from `vic_elec`.
+- Victorian Electricity Demand from `vic_elec`.
 
 ```{r}
 vic_elec |>
@@ -151,7 +151,7 @@ vic_elec |>
   autoplot(log(Demand)) + labs(title = "Victorian Electricity Demand")
 ```
 
--   Gas production from `aus_production`.
+- Gas production from `aus_production`.
 
 ```{r}
 aus_production |>

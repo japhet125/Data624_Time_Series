@@ -600,9 +600,7 @@ fc_fit_arima |> autoplot(air_data) + labs(title = "10 Years forecast of Australi
 
 Applying the backshift operator:
 
-\\\[
-\\boxed{y_t-2y\_{t-1}+y\_{t-2}=\\varepsilon_t-0.8963\\varepsilon\_{t-1}}
-\\\]
+\\\[ \\boxed{y_t-2y\_{t-1}+y\_{t-2}=\\varepsilon_t-0.8963\\varepsilon\_{t-1}} \\\]
 
 **##Interpretation:** The selected ARIMA(0,2,1) model can be expressed using the backshift operator as \\((1-B)\^2y_t=(1-0.8963B)\\varepsilon_t\\). The operator \\((1-B)\^2\\) represents second-order differencing, which removes non-stationarity from the original series. The moving-average component uses the current error and the previous error, with an estimated coefficient of -0.8963. Therefore, the model describes the second difference of passenger numbers as a function of current and previous random shocks.
 

@@ -2,7 +2,9 @@
 title: "Project 1"
 author: "Guibril Ramde"
 date: "2026-10-19"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -14,7 +16,8 @@ library(dplyr)
 ```
 
 ## Part A: ATM Forecast
-## The objective of this analysis is to forecast daily cash withdrawals for four ATM machines during May 2010. The dataset contains historical daily cash withdrawal records from May 1, 2009, through April 30, 2010. Cash withdrawals are measured in hundreds of dollars. The analysis begins with data preparation and exploratory data analysis to identify trends, seasonal patterns, missing values, and unusual observations. Different forecasting methods will then be evaluated to determine which approaches provide reliable predictions for each ATM. The final forecasts will be used to estimate the expected cash requirements for May 2010 and provide information that may support ATM cash management and replenishment planning.
+
+The objective of this analysis is to forecast daily cash withdrawals for four ATM machines during May 2010. The dataset contains historical daily cash withdrawal records from May 1, 2009, through April 30, 2010. Cash withdrawals are measured in hundreds of dollars. The analysis begins with data preparation and exploratory data analysis to identify trends, seasonal patterns, missing values, and unusual observations. Different forecasting methods will then be evaluated to determine which approaches provide reliable predictions for each ATM. The final forecasts will be used to estimate the expected cash requirements for May 2010 and provide information that may support ATM cash management and replenishment planning.
 
 ## Import and data preparation
 
@@ -31,9 +34,10 @@ glimpse(tsibble_ATM_data)
 range(tsibble_ATM_data$DATE)
 
 ```
-##Interpretation:After importing and preparing the dataset, we obtained 1,460 observations and three variables: DATE, ATM, and Cash. The dataset contains four ATM machines, each with 365 daily observations from May 1, 2009, through April 30, 2010. The DATE variable was converted from Excel's numeric date format into R's Date format. The dataset was then converted into a tsibble, using ATM as the key and DATE as the time index.
+## Interpretation:
+After importing and preparing the dataset, we obtained 1,460 observations and three variables: DATE, ATM, and Cash. The dataset contains four ATM machines, each with 365 daily observations from May 1, 2009, through April 30, 2010. The DATE variable was converted from Excel's numeric date format into R's Date format. The dataset was then converted into a tsibble, using ATM as the key and DATE as the time index.
 
-##Exploratory data analysis
+## Exploratory data analysis
 ```{r}
 # Plot the four ATMs
 tsibble_ATM_data |>
@@ -66,7 +70,8 @@ has_gaps(tsibble_ATM_data)
 scan_gaps(tsibble_ATM_data)
 ```
 
-##Interpretation: The time-series plots reveal different withdrawal patterns across the four ATM machines. ATM1 and ATM2 exhibit frequent fluctuations, with recurring sharp decreases that may indicate weekly seasonality. ATM3 remains at zero for most of the observation period, followed by a sudden increase in withdrawals at the end of April 2010. ATM4 has considerably larger withdrawal amounts than the other ATMs and contains an extreme observation around March 2010. These differences suggest that a single forecasting method may not be appropriate for all four machines.
+## Interpretation: 
+The time-series plots reveal different withdrawal patterns across the four ATM machines. ATM1 and ATM2 exhibit frequent fluctuations, with recurring sharp decreases that may indicate weekly seasonality. ATM3 remains at zero for most of the observation period, followed by a sudden increase in withdrawals at the end of April 2010. ATM4 has considerably larger withdrawal amounts than the other ATMs and contains an extreme observation around March 2010. These differences suggest that a single forecasting method may not be appropriate for all four machines.
 
 ```{r}
 tsibble_ATM_data |>
@@ -78,9 +83,10 @@ tsibble_ATM_data |>
 
 
 ```
-##Interpretation: there may be some seasonality in ATM1 and ATM2 it show some seasonality. the ACF suggest that there is ni white noise on ATM1 and ATM2 and ATM3 but ATM4 may contain some white noise.
+## Interpretation: 
+The ACF plots suggest serial dependence and possible weekly seasonality for ATM1 and ATM2. ATM3 exhibits unusual behavior because most observations are zero, followed by a sudden increase. ATM4 shows weaker autocorrelation patterns, but the presence of an extreme observation makes it difficult to determine whether the series behaves like white noise.
 
-##Investigate missing values and outliers
+## Investigate missing values and outliers
 ```{r}
 # Missing Cash values
 tsibble_ATM_data |>
@@ -140,13 +146,14 @@ fit_train <- train_ATM |>
     ETS = ETS(Cash),
     ARIMA = ARIMA(Cash)
   )
-
+fit_train
 # Forecast April 2010
 fc_test <- fit_train |>
   forecast(new_data = test_ATM)
+fc_test
 ```
 
-##Plot models for each ATM
+## Plot models for each ATM
 
 ```{r}
 # Convert forecasts to a regular tibble for plotting
@@ -183,9 +190,10 @@ ggplot() +
   ) +
   theme_minimal()
 ```
-### Interpretation: Forecast Model Comparison
+## Interpretation: Forecast Model Comparison
 
-#The forecasting models were evaluated by comparing their predictions for April 2010 with the actual cash withdrawals. For ATM1 and ATM2, ARIMA and Seasonal Naive capture the recurring fluctuations more effectively than the Naive and Random Walk with Drift models. The ARIMA model produces the lowest RMSE for both ATMs, indicating better predictive accuracy during the testing period. For ATM3, all five models predict approximately zero withdrawals, while the actual observations increase sharply near the end of April. This suggests that the historical zero withdrawals provide limited information for predicting the sudden increase in activity. For ATM4, the forecasting models produce substantially different patterns. Random Walk with Drift achieves the lowest RMSE, although its improvement over ARIMA is relatively small. Further investigation of the extreme historical observation may help determine whether the model is appropriate. Overall, the comparison suggests that different ATM machines require different forecasting approaches because their withdrawal patterns are not identical.
+The five forecasting models were evaluated using the April 2010 test data. The results indicate that ETS provides the lowest RMSE for ATM1 and ATM2, suggesting that it produces more accurate forecasts than the other models during the testing period. Both ATMs exhibit recurring weekly fluctuations, which are captured more effectively by the seasonal forecasting methods than by the Naive and Random Walk with Drift models. For ATM3, the forecasting models struggle to predict the sudden increase in withdrawals toward the end of April because most of the training observations are zero. This suggests that the forecasting results should be interpreted cautiously. For ATM4, the Random Walk with Drift model achieves the lowest RMSE, although the forecasting errors remain relatively large. The extreme historical observation may also affect model performance. Overall, the results demonstrate that different ATM machines require different forecasting approaches because their withdrawal patterns are not identical.
+
 
 ## Compare forecasting accuracy
 
@@ -200,7 +208,11 @@ accuracy_table |>
   arrange(RMSE, .by_group = TRUE)
 ```
 
-#Visualize model accuracy
+## Interpretation: 
+
+The best forecasting model for each ATM was selected primarily based on the lowest RMSE during the April 2010 testing period. MAE and MAPE were also examined as supplementary accuracy measures, although MAPE is less reliable when actual withdrawals are zero or close to zero.
+
+# Visualize model accuracy
 ```{r}
 accuracy_table |>
   ggplot(aes(
@@ -218,6 +230,8 @@ accuracy_table |>
   theme_minimal() +
   theme(legend.position = "none")
 ```
+## Interpretation: 
+We can Visualize those result base on the bar plot we have, it indicate ETS to be best model for ATM1, and ETS to be best for ATM2 and ATM3 all model might be good to work with, and for ATM4 the best model is RW/Drift.
 
 ```{r}
 best_models <- accuracy_table |>
@@ -229,6 +243,11 @@ best_models <- accuracy_table |>
 best_models
 
 ```
+## Interpretation: 
+
+Base on the observation of the 4 ATMs the best model base on the RMSE, MAE and MAPE result we can conlude for ATM1 the best model would be ETS Model, and for ATM2 the best model would be ETS model, and for ATM3 the best model would be ARIMA model, and for ATM4 the model woukd be RW/Drift. 
+
+
 ## forecasting May 2010
 ```{r}
 # Prepare complete historical data
@@ -243,6 +262,7 @@ final_ATM_data <- tsibble_ATM_data |>
     )$y
   ) |>
   ungroup()
+final_ATM_data
 
 # Fit all five models using the full history
 final_fit <- final_ATM_data |>
@@ -253,17 +273,21 @@ final_fit <- final_ATM_data |>
     ETS = ETS(Cash),
     ARIMA = ARIMA(Cash)
   )
+final_fit
 
 # Forecast May 2010
 final_fc <- final_fit |>
   forecast(h = 31)
+final_fc
 ```
+## Interpretation: May 2010 Forecasts
 
+The May 2010 forecasts reveal different expected withdrawal patterns across the four ATM machines. ATM1 and ATM2 display recurring weekly fluctuations, suggesting that the seasonal patterns observed in the historical data may continue during the forecast period. ATM3 produces a relatively constant forecast, although the sudden increase in withdrawals near the end of April makes this prediction uncertain. For ATM4, the Random Walk with Drift model predicts a gradual decline in daily withdrawals throughout May 2010. However, the large historical outlier and forecasting errors suggest considerable uncertainty in these predictions. Overall, the results indicate that ATM1 and ATM2 exhibit more consistent weekly patterns, while ATM3 and ATM4 require additional investigation before their forecasts are used for cash replenishment decisions.
 
 ```{r}
 selected_models <- tibble(
   ATM = c("ATM1", "ATM2", "ATM3", "ATM4"),
-  .model = c("ARIMA", "ARIMA", "NAIVE", "DRIFT")
+  .model = c("ETS", "ETS", "ARIMA", "DRIFT")
 )
 
 # Keep only the selected forecasts
@@ -286,6 +310,11 @@ ggplot(selected_fc,
   ) +
   theme_minimal()
 ```
+
+
+## Interpretation: 
+
+The forecast plots indicate recurring weekly fluctuations for ATM1 and ATM2. ATM3 exhibits relatively stable predicted withdrawals as most its data show no withdrawals befor the sudden increase, while ATM4 shows a gradual downward trend. These patterns reflect the behavior of the selected forecasting models during May 2010.
 
 ```{r}
 # Historical data
@@ -317,9 +346,26 @@ ggplot() +
   ) +
   theme_minimal()
 ```
-### Interpretation: May 2010 Forecasts
+```{r}
+selected_fc_dist <- final_fc |>
+  semi_join(
+    selected_models,
+    by = c("ATM", ".model")
+  )
 
-#The selected forecasting models produce different patterns for the four ATM machines during May 2010. ATM1 and ATM2 exhibit recurring weekly fluctuations, with relatively high withdrawals on certain days and sharp decreases on others. These patterns are consistent with the seasonal behavior observed in the historical data.For ATM3, the Naive model predicts a constant daily withdrawal of approximately 85 hundreds of dollars ($8,500). However, this forecast should be interpreted cautiously because the ATM recorded zero withdrawals for most of the historical period before experiencing a sudden increase at the end of April. For ATM4, the Random Walk with Drift model predicts a gradual decrease in daily cash withdrawals throughout May. Nevertheless, the extreme observation in the historical data and the relatively high forecasting errors indicate substantial uncertainty. Overall, the forecasts suggest that ATM1 and ATM2 have more predictable weekly withdrawal patterns, while ATM3 and ATM4 require greater caution when estimating future cash requirements.
+selected_fc_dist |>
+  autoplot(final_ATM_data, level = c(80, 95)) +
+  facet_wrap(vars(ATM), scales = "free_y") +
+  labs(
+    title = "ATM Cash Withdrawal Forecasts for May 2010",
+    x = "Date",
+    y = "Cash (Hundreds of Dollars)"
+  )
+```
+
+## Interpretation: May 2010 Forecasts
+
+The selected forecasting models produce different patterns for the four ATM machines during May 2010. ATM1 and ATM2 exhibit recurring weekly fluctuations, with relatively high withdrawals on certain days and sharp decreases on others. These patterns are consistent with the seasonal behavior observed in the historical data.For ATM3, the selected ARIMA model produces forecasts based on the historical withdrawal patterns. However, because ATM3 recorded zero withdrawals for most of the historical period before experiencing a sudden increase near the end of April, these forecasts should be interpreted cautiously. For ATM4, the Random Walk with Drift model predicts a gradual decrease in daily cash withdrawals throughout May. Nevertheless, the extreme observation in the historical data and the relatively high forecasting errors indicate substantial uncertainty. Overall, the forecasts suggest that ATM1 and ATM2 have more predictable weekly withdrawal patterns, while ATM3 and ATM4 require greater caution when estimating future cash requirements.
 
 
 ## Final Stage
@@ -356,4 +402,392 @@ write_xlsx(
 
 ```
 
+## Conclusion For Part A:
 
+The objective of this project was to forecast daily cash withdrawals for four ATM machines during May 2010 using historical observations from May 2009 through April 2010. Five forecasting methods were evaluated using April 2010 as the testing period: Naive, Seasonal Naive, Random Walk with Drift, ETS, and ARIMA. The results indicate that ETS provides the best forecasting accuracy for ATM1 and ATM2 based on RMSE, while Random Walk with Drift performs best for ATM4. ATM3 presents a particular forecasting challenge because withdrawals remained at zero for most of the historical period before increasing sharply near the end of April. The analysis demonstrates that forecasting performance depends on the characteristics of each ATM. Weekly seasonality, unusual observations, and changes in withdrawal activity can affect forecasting accuracy. Although the selected models provide estimates of future cash requirements, prediction uncertainty should be considered when planning ATM cash replenishment. Further improvements could include investigating unusual observations, incorporating additional historical data, and evaluating the forecasting models over multiple testing periods.
+
+# Part B: Forcating Power, Residential Customer Forecast Load
+
+# Load the data
+```{r}
+load_Power_data <- read_excel("ResidentialCustomerForecastLoad-624.xlsx")
+load_Power_data
+
+
+```
+# Understanding the data
+```{r}
+glimpse(load_Power_data)
+summary(load_Power_data)
+colSums(is.na(load_Power_data))
+sum(duplicated(load_Power_data))
+
+```
+# Preparing the data
+```{r}
+is_tsibble(load_Power_data)
+# Convert to tsible
+power_data <- load_Power_data |>
+  mutate(Date = yearmonth(`YYYY-MMM`)) |>
+  select(Date, KWH) |>
+  as_tsibble(
+    index = Date
+  )
+power_data
+
+is_tsibble(power_data)
+has_gaps(power_data)
+scan_gaps(power_data)
+count_gaps(power_data)
+range(power_data$Date)
+
+power_data <- power_data |>
+  fill_gaps(KWH = NA_real_)
+
+has_gaps(power_data)
+
+```
+## Interpretation: Data Preparation
+
+The residential electricity consumption dataset contains 192 monthly observations, with one missing value in the KWH variable. The `YYYY-MMM` column was converted into a monthly time index using `yearmonth()`, and the dataset was transformed into a tsibble for time series analysis. The dataset was also examined for missing observations and gaps in the monthly sequence. Any missing time periods were made explicit using `fill_gaps()`. The missing electricity consumption values will be investigated and treated appropriately before fitting forecasting models.
+
+# Exploratory Analysis
+
+```{r}
+power_data |>
+  autoplot(KWH) + labs(title = "Monthly Power Customer Consomption in KWH",
+                       x = "Date",
+                       y = "Electricity Consumption (KWH)")
+```
+
+```{r}
+# Seasonal patterns
+power_data |>
+  gg_season(KWH) + labs(title = "Monthly Electricity Consumption by Season",
+                        y = "Electricity Consumption (KWH)",
+                        x = "Month")
+```
+## Interpretation: Exploratory Analysis
+
+The time series plot reveals a recurring seasonal pattern in monthly residential electricity consumption. Electricity demand generally increases during winter and summer and decreases during spring and autumn. There also appears to be some increase in the magnitude of peak consumption toward the end of the observation period, although the overall trend is not consistently upward.
+
+The seasonal plot provides further evidence of annual seasonality. Electricity consumption is generally higher during January and the summer months, particularly July and August, while lower consumption is observed during March, April, May, October, and November. An unusually low observation appears around July 2010, which may represent an outlier or an unusual event that requires further investigation.
+
+
+```{r}
+power_data |>
+  filter(
+    Date >= yearmonth("2010 Jun"),
+    Date <= yearmonth("2010 Aug")
+  )
+power_data |>
+  ACF(KWH) |> autoplot()
+```
+## Interpretation: Unusual Observation in July 2010
+
+Further investigation of the residential electricity consumption dataset identified an unusually low observation in July 2010, when consumption was recorded as 770,523 KWH. In comparison, electricity consumption was 6,696,292 KWH in June 2010 and 7,922,701 KWH in August 2010. The July observation was approximately 89.5% lower than the average of the two neighboring months, representing a substantial deviation from the surrounding consumption levels.
+
+This unusual observation may indicate a data-entry error, incomplete reporting, or an actual disruption in electricity consumption. However, without additional information about the data collection process, the cause cannot be determined. Therefore, the observation was retained in the original analysis to preserve the integrity of the dataset. Its potential influence on model estimation and forecasting accuracy should be considered when interpreting the results.
+
+## Interpretation: Autocorrelation Analysis
+
+The ACF plot reveals a strong seasonal pattern in monthly electricity consumption. Significant positive autocorrelations occur at several lags, particularly lag 12, indicating that electricity consumption in a given month is strongly associated with consumption during the same month in the previous year. Negative autocorrelations at several intermediate lags suggest differences in electricity demand between seasons. These results provide additional evidence of annual seasonality and suggest that seasonal forecasting models, such as Seasonal ARIMA or seasonal ETS, may be appropriate.
+
+# Transformation
+```{r}
+# Using box-cox, log transformation
+lambda <- power_data |>
+  features(KWH, features = guerrero) |>
+  pull(lambda_guerrero)
+lambda
+# Box_cox transformation
+box_cox_power <- power_data |>
+  mutate(box_cox_pw = box_cox(KWH, lambda = lambda))
+box_cox_power
+
+# Visualize the box-cox transformation
+
+box_cox_power |>
+  autoplot(box_cox_pw) + labs(title = "Box Cox Transformation of Power Customer Data")
+
+
+# Log Transformation
+log_power_tr <- power_data |>
+  mutate(log_trans = log(KWH))
+
+# Visualize
+
+log_power_tr |> autoplot(log_trans) + labs(title = "Log Transformation of Power Customer Data")
+
+  
+```
+
+## Interpretation:
+## Interpretation: Data Transformation
+
+A Box-Cox transformation was applied to investigate whether stabilizing the variance could improve the modeling of residential electricity consumption. A logarithmic transformation was also examined for comparison. Both transformations changed the scale of the observations while preserving the underlying seasonal structure.
+
+The transformed series continued to exhibit recurring seasonal fluctuations. Therefore, transformation alone did not eliminate seasonality, and forecasting models capable of handling seasonal patterns were still required. The effectiveness of the Box-Cox transformation was subsequently evaluated through out-of-sample forecast accuracy.
+
+# Train/test split
+```{r}
+# Training period: yearMonth 2014
+train_Power <- power_data |>
+  filter(Date <= yearmonth("2011 Dec"))
+
+# Testing period: 2012 - 2013
+test_Power <- power_data |>
+  filter(
+    Date >= yearmonth("2012 Jan"),
+    Date <= yearmonth("2013 Dec")
+  )
+
+# Impute missing values in training data only
+train_Power_data <- train_Power |>
+  arrange(Date) |>
+  mutate(
+    KWH = approx(
+      x = which(!is.na(KWH)),
+      y = KWH[!is.na(KWH)],
+      xout = seq_along(KWH),
+      rule = 2
+    )$y
+  ) |>
+  ungroup()
+
+# Check training and testing periods
+range(train_Power_data$Date)
+range(test_Power$Date)
+
+# Check missing values
+sum(is.na(train_Power$KWH))
+sum(is.na(train_Power_data$KWH))
+
+# Visualize the training data 
+
+train_Power_data |>
+  autoplot(KWH) + labs(title = "Residential Electricity Consumption After Imputation")
+
+```
+## Interpretation:
+To better have a training data that can capture the dataset we used training data from 1998- 2011 and for testing the data we used 2012-2013 that will gives us better training and we can then forecast with accuraccy.
+
+
+# Model fitting
+
+```{r}
+ # Box-Cox lambda from training data
+lambda_train <- train_Power_data |>
+  features(KWH, guerrero) |>
+  pull(lambda_guerrero)
+
+# Fit models
+power_models <- train_Power_data |>
+  model(SNAIVE = SNAIVE(KWH),
+        ETS = ETS(KWH),
+        ARIMA = ARIMA(KWH),
+        ARIMA_BoxCox = ARIMA(box_cox(KWH, lambda_train)))
+
+glance(power_models)
+
+
+# Forecast 24 months
+power_test_forecasts <- power_models |>
+  forecast(h = 24)
+
+# Compare models
+power_accuracy <- power_test_forecasts |>
+  accuracy(test_Power)
+
+power_accuracy |>
+  select(.model, RMSE, MAE, MAPE) |>
+  arrange(RMSE)
+  
+```
+## Interpretation:
+Four forecasting models were fitted to the residential electricity consumption data: Seasonal Naïve, ETS, ARIMA, and ARIMA with a Box-Cox transformation. The models were evaluated using the 2012–2013 testing period. The ETS model achieved the lowest RMSE of approximately 861,658 KWH, MAE of 646,527 KWH, and MAPE of 8.56%, outperforming the other three models. The Seasonal Naïve model was the second-best performer, with an RMSE of approximately 965,567 KWH. ARIMA and ARIMA_BoxCox produced higher forecasting errors, with ARIMA_BoxCox performing the worst. These results suggest that ETS is the most suitable model among the four candidates for forecasting residential electricity consumption in 2014.
+
+# Model diagnostics
+```{r}
+# Residual ACF, Ljung - Box
+power_residuals <- power_models |>
+  augment()
+power_residuals
+
+power_models |>
+  select(ARIMA) |>
+  gg_tsresiduals()
+
+power_models |>
+  select(ETS) |>
+  gg_tsresiduals()
+
+power_models |>
+  select(ARIMA_BoxCox) |>
+  gg_tsresiduals()
+
+power_models |>
+  select(SNAIVE) |>
+  gg_tsresiduals()
+# Plot ACF of All four models
+power_residuals |>
+  ACF(.innov, lag_max = 36) |>
+  autoplot() +
+  facet_wrap(vars(.model), scales = "free_y") +
+  labs(
+    title = "Residual ACF Comparison",
+    x = "Lag",
+    y = "ACF"
+  )
+```
+```{r}
+power_ljungbox <- power_models |>
+  augment() |>
+  features(
+    .innov,
+    ljung_box,
+    lag = 24,
+    dof = 0
+  )
+
+power_ljungbox
+
+```
+## Interpretation:
+Residual diagnostics were performed using residual time plots, ACF plots, and the Ljung-Box test. The residual ACF plots show that the ARIMA and ARIMA_BoxCox models have relatively weak remaining autocorrelation, while the Seasonal Naïve model exhibits significant autocorrelation at certain lags. Using 24 lags and no degrees-of-freedom adjustment, the Ljung-Box test produced p-values of 0.8140 for ARIMA, 0.9995 for ARIMA_BoxCox, and 0.0841 for ETS. These results do not provide sufficient evidence to reject the null hypothesis of uncorrelated residuals at the 5% significance level. In contrast, the Seasonal Naïve model produced a p-value of approximately 0.00002, indicating significant remaining autocorrelation. Although ETS does not have the highest Ljung-Box p-value, it achieved the lowest forecasting errors on the testing dataset. The results should be interpreted as preliminary until model-specific degrees-of-freedom adjustments are considered.
+# Forecast evaluation 
+
+```{r}
+# Comparing Diagnostics results
+model_comparison <- power_accuracy |>
+  select(.model, RMSE, MAE, MAPE) |>
+  left_join(
+    power_ljungbox,
+    by = ".model"
+  ) |>
+  arrange(RMSE)
+
+model_comparison
+```
+## Interpretation:
+
+## Interpretation: Forecast Evaluation
+
+The four forecasting models were compared using RMSE, MAE, and MAPE calculated from the 2012–2013 testing dataset. The ETS model achieved the lowest RMSE of approximately 861,658 KWH and MAPE of 8.56%, followed by the Seasonal Naïve model with an RMSE of approximately 965,567 KWH and MAPE of 9.30%. The ARIMA and ARIMA_BoxCox models produced higher forecasting errors, with the transformed ARIMA model performing the worst.
+
+Although the ARIMA and ARIMA_BoxCox models showed less evidence of residual autocorrelation based on the Ljung–Box test, ETS achieved the best out-of-sample forecasting accuracy. Therefore, ETS was selected as the preferred forecasting model for residential electricity consumption in 2014.
+# Final Forecast
+
+```{r}
+# Impute missing values in the full historical data
+power_data_final <- power_data |>
+  arrange(Date) |>
+  mutate(
+    KWH = approx(
+      x = which(!is.na(KWH)),
+      y = KWH[!is.na(KWH)],
+      xout = seq_along(KWH),
+      rule = 2
+    )$y
+  )
+
+# Verify
+sum(is.na(power_data_final$KWH))
+
+# Fit the selected model
+final_model <- power_data_final |>
+  model(ETS = ETS(KWH))
+
+report(final_model)
+
+# Forecast 12 months of 2014
+forecast_2014 <- final_model |>
+  forecast(h = 12)
+
+forecast_2014 |>
+  autoplot(power_data_final) +
+  labs(
+    title = "Residential Electricity Consumption Forecast for 2014",
+    x = "Year",
+    y = "KWH"
+  )
+
+# Display 2014 monthly point forecasts
+forecast_2014 |>
+  as_tibble() |>
+  select(Date, .mean)
+
+# Display 80% and 95% prediction intervals
+forecast_2014 |>
+  hilo(level = c(80, 95))
+```
+## Interpretation: Final Forecast for 2014
+
+The ETS model was selected to forecast monthly residential electricity consumption for January through December 2014 because it achieved the lowest forecasting errors during the testing period. After refitting the model using the complete historical dataset from January 1998 through December 2013, the selected specification was ETS(M,N,M), representing multiplicative errors, no trend, and multiplicative seasonality.
+
+The forecast exhibits recurring seasonal fluctuations, with electricity consumption expected to increase during periods of higher seasonal demand and decrease during periods of lower demand. The absence of a trend component suggests that the underlying level of electricity consumption is expected to remain relatively stable throughout 2014, while seasonal variations continue.
+
+The estimated level smoothing parameter is approximately 0.1137, indicating gradual adjustments to the consumption level. The seasonal smoothing parameter is approximately 0.0001, suggesting that the seasonal pattern remains relatively stable over time.
+
+The 80% and 95% prediction intervals represent the uncertainty surrounding the monthly forecasts. The wider 95% intervals provide a broader range of plausible future consumption values.
+
+Overall, the ETS(M,N,M) model captures the recurring seasonal behavior observed in the historical data and provides monthly electricity consumption forecasts for 2014.
+
+# Final stage
+```{r}
+# Final stage: Export 2014 forecasts
+library(dplyr)
+library(writexl)
+
+# Extract monthly forecasts
+monthly_forecast <- forecast_2014 |>
+  mutate(
+    Lower_80 = quantile(KWH, 0.10),
+    Upper_80 = quantile(KWH, 0.90),
+    Lower_95 = quantile(KWH, 0.025),
+    Upper_95 = quantile(KWH, 0.975)
+  ) |>
+  as_tibble() |>
+  transmute(
+    Date = as.character(Date),
+    Model = .model,
+    Forecast_KWH = .mean,
+    Lower_80,
+    Upper_80,
+    Lower_95,
+    Upper_95
+  )
+
+# Calculate total forecast consumption for 2014
+yearly_forecast <- monthly_forecast |>
+  summarise(
+    Year = 2014,
+    Total_Forecast_KWH = sum(Forecast_KWH),
+    Average_Monthly_KWH = mean(Forecast_KWH),
+    .groups = "drop"
+  )
+
+yearly_forecast
+
+# Export to Excel
+write_xlsx(
+  list(
+    Monthly_Forecasts = monthly_forecast,
+    Annual_Summary = yearly_forecast
+  ),
+  "KWH_2014_Forecasts.xlsx"
+)
+```
+
+
+## Conclusion: Part B
+
+The objective of Part B was to analyze historical residential electricity consumption and develop monthly forecasts for 2014. The analysis included data preparation, exploratory analysis, transformations, model fitting, diagnostic testing, and forecast evaluation.
+
+The exploratory analysis revealed a strong annual seasonal pattern in electricity consumption, with higher demand during winter and summer and lower consumption during other months. An unusually low observation was identified in July 2010 and retained because its cause could not be verified.
+
+Four forecasting models were evaluated using the 2012–2013 testing period: Seasonal Naïve, ETS, ARIMA, and ARIMA with a Box-Cox transformation. Among these models, ETS achieved the lowest RMSE of approximately 861,658 KWH and MAPE of 8.56%, indicating the strongest out-of-sample forecasting performance.
+
+The ETS model was subsequently refitted using the complete historical dataset. The selected ETS(M,N,M) specification captured the recurring seasonal fluctuations without including a trend component. The resulting forecasts indicate that residential electricity consumption is expected to continue exhibiting seasonal variation throughout 2014.
+
+Although the ETS model provided the best forecasting accuracy among the models considered, the unusual July 2010 observation and uncertainty in future electricity demand remain important limitations. Overall, the analysis demonstrates the importance of seasonal modeling, out-of-sample evaluation, and residual diagnostics when forecasting residential electricity consumption.

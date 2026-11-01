@@ -1,0 +1,474 @@
+---
+title: "Water Flow Analysis from two dataset"
+author: "Guibril Ramde"
+format:
+  html: default
+  pdf: default
+editor: visual
+---
+
+## Part C- Project 1
+
+**Exploratory Analysis and data loading Preparation**
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(fpp3)
+library(lubridate)
+library(janitor)
+library(lubridate)
+library(dplyr)
+#library(fpp3)
+
+
+# Load and clean original datasets
+water_data1 <- read_excel("Waterflow_Pipe1.xlsx") |>
+  clean_names() |>
+  mutate(Pipe = "Pipe1")
+
+water_data2 <- read_excel("Waterflow_Pipe2.xlsx") |>
+  clean_names() |>
+  mutate(Pipe = "Pipe2")
+
+# Combine datasets
+water_data <- bind_rows(
+  water_data1,
+  water_data2
+)
+
+```
+
+```{r}
+class(water_data1$date_time)
+class(water_data2$date_time)
+
+range(water_data1$date_time, na.rm = TRUE)
+range(water_data2$date_time, na.rm = TRUE)
+```
+
+```{r}
+
+class(water_data1$date_time)
+class(water_data2$date_time)
+
+head(water_data1$date_time)
+head(water_data2$date_time)
+```
+
+**Aggregate observation by hour**
+
+```{r}
+water_hourly <- water_data |>
+  mutate(
+    # Convert Excel numeric dates into POSIXct
+    date_time = as.POSIXct(
+      round(date_time * 86400),
+      origin = "1899-12-30",
+      tz = "UTC"
+    ),
+    
+    # Aggregate timestamps to the hour
+    date_time = floor_date(date_time, unit = "hour")
+  ) |>
+  group_by(Pipe, date_time) |>
+  summarise(
+    water_flow = if (all(is.na(water_flow))) {
+      NA_real_
+    } else {
+      mean(water_flow, na.rm = TRUE)
+    },
+    .groups = "drop"
+  )
+
+water_hourly
+
+glimpse(water_hourly)
+
+class(water_hourly$date_time)
+
+water_hourly |>
+  group_by(Pipe) |>
+  summarise(
+    Start = min(date_time),
+    End = max(date_time),
+    Observations = n(),
+    .groups = "drop"
+  )
+```
+
+## convert to tsibble
+
+```{r}
+tsibble_water_data <- water_hourly |>
+  as_tsibble(
+    key = Pipe,
+    index = date_time
+  )
+
+is_tsibble(tsibble_water_data)
+has_gaps(tsibble_water_data)
+count_gaps(tsibble_water_data)
+
+```
+
+## Visualize the hourly data
+
+```{r}
+tsibble_water_data |>
+  autoplot(water_flow) +
+  facet_wrap(~ Pipe, scales = "free_y") +
+  labs(
+    title = "Hourly Water Flow by Pipe",
+    x = "Date and Time",
+    y = "Average Water Flow"
+  )
+```
+
+```{r}
+
+tsibble_water_data |>
+  count_gaps() |>
+  print()
+
+tsibble_water_data |>
+  group_by_key() |>
+  summarise(
+    Start_Date = min(date_time),
+    End_Date = max(date_time),
+    Observations = n()
+  )
+```
+
+```{r}
+water_complete <- tsibble_water_data |>
+  fill_gaps(water_flow = NA_real_)
+
+water_complete |>
+  group_by_key() |>
+  summarise(
+    Total_Hours = n(),
+    Missing_Hours = sum(is.na(water_flow)),
+    Missing_Percent = mean(is.na(water_flow)) * 100
+  )
+```
+
+```{r}
+water_complete <- tsibble_water_data |>
+  fill_gaps(water_flow = NA_real_) |>
+  group_by_key() |>
+  mutate(
+    water_flow = zoo::na.approx(
+      water_flow,
+      na.rm = FALSE
+    )
+  ) |>
+  ungroup()
+
+```
+
+```{r}
+
+# Verify missing values
+water_complete |>
+  group_by_key() |>
+  summarise(
+    Missing = sum(is.na(water_flow)),
+    Observations = n()
+  )
+```
+
+## **Interpretation:** Data Preparation and Missing Values
+
+The two water-flow datasets were imported from Excel and cleaned using the `janitor` package. Since the datasets contained numeric Excel date-time values, the timestamps were converted to POSIXct format. Small floating-point precision errors were corrected by rounding the timestamps to the nearest second.
+
+The observations were then aggregated by hour, using the mean for hours containing multiple measurements. The datasets were combined into a tsibble, with each pipe identified by a separate key.
+
+An examination of missing hourly observations revealed four missing hours for Pipe1 and no missing hours for Pipe2. Linear interpolation was selected to estimate the four missing observations in Pipe1 while preserving the hourly time structure for subsequent forecasting analysis.
+
+```{r}
+water_complete |>
+  ACF(water_flow, lag_max = 72) |>
+  autoplot() +
+  facet_wrap(~ Pipe, scales = "free_y") +
+  labs(
+    title = "ACF of Hourly Water Flow",
+    x = "Lag (hours)",
+    y = "Autocorrelation"
+  )
+
+```
+
+```{r}
+stationarity_test <- water_complete |>
+  features(
+    water_flow,
+    unitroot_kpss
+  )
+
+stationarity_test
+
+water_complete |>
+  features(
+    water_flow,
+    unitroot_ndiffs
+  )
+```
+
+### Interpretation: Stationarity Analysis
+
+The stationarity of the hourly water-flow data was evaluated using the Kwiatkowski–Phillips–Schmidt–Shin (KPSS) test and the recommended number of differences.
+
+For Pipe1, the KPSS statistic was 0.1928, with a reported p-value of 0.10. For Pipe2, the KPSS statistic was 0.1054, also with a reported p-value of 0.10. Since both p-values exceed the 0.05 significance level, the null hypothesis of level stationarity cannot be rejected for either series.
+
+Furthermore, the `unitroot_ndiffs()` analysis recommended zero nonseasonal differences for both pipes. These findings are consistent with the ACF plots, which did not display the slowly declining autocorrelation typically associated with nonstationary time series.
+
+Therefore, both hourly water-flow series appear suitable for forecasting without nonseasonal differencing. However, stationarity alone does not guarantee accurate forecasts, so forecasting models must be evaluated using out-of-sample observations.
+
+## Explore daily seasonality
+
+```{r}
+water_complete |>
+  mutate(Hour = hour(date_time)) |>
+  ggplot(aes(x = Hour, y = water_flow)) +
+  geom_boxplot(aes(group = Hour)) +
+  facet_wrap(~ Pipe, scales = "free_y") +
+  labs(
+    title = "Hourly Water Flow Distribution",
+    x = "Hour of Day",
+    y = "Water Flow"
+  )
+```
+
+### Interpretation: Autocorrelation and Daily Seasonality
+
+The autocorrelation function (ACF) was examined for both water-flow series to investigate temporal dependence and possible seasonal patterns.
+
+For Pipe1, most autocorrelation coefficients fall within the confidence bounds, indicating relatively weak serial dependence. The absence of a slowly declining ACF suggests that the series may be stationary.
+
+For Pipe2, several autocorrelation coefficients exceed the confidence bounds, suggesting some serial dependence. However, the coefficients are generally small, and no strong repeating seasonal pattern is evident.
+
+The hourly boxplots show that Pipe2 has a higher average water-flow level and greater variability than Pipe1. Although the distributions differ across hours, there is no clear or consistent daily seasonal pattern in either series.
+
+Overall, the exploratory results suggest that both series may be suitable for forecasting using relatively simple time series models. Formal stationarity testing and model evaluation are required before selecting the final forecasting approach.
+
+## Fit forecasting model
+
+```{r}
+water_models <- water_complete |>
+  model(
+    MEAN = MEAN(water_flow),
+    ETS = ETS(water_flow),
+    ARIMA = ARIMA(water_flow)
+  )
+
+water_models
+
+water_models |>
+  report()
+
+water_models |>
+  accuracy() |>
+  select(Pipe, .model, RMSE, MAE, MAPE)
+```
+
+```{r}
+# Identify the final timestamp for each pipe
+water_split <- water_complete |>
+  group_by_key() |>
+  mutate(
+    Last_Time = max(date_time),
+    Set = if_else(
+      date_time > Last_Time - hours(48),
+      "Test",
+      "Train"
+    )
+  ) |>
+  ungroup()
+
+# Training data
+water_train <- water_split |>
+  filter(Set == "Train") |>
+  select(Pipe, date_time, water_flow)
+
+# Test data
+water_test <- water_split |>
+  filter(Set == "Test") |>
+  select(Pipe, date_time, water_flow)
+
+water_train_models <- water_train |>
+  model(
+    MEAN = MEAN(water_flow),
+    ETS = ETS(water_flow),
+    ARIMA = ARIMA(water_flow)
+  )
+
+# Forecast 48 hours
+water_test_forecast <- water_train_models |>
+  forecast(h = 48)
+
+# Evaluate on unseen data
+water_accuracy <- water_test_forecast |>
+  accuracy(water_test)
+
+water_accuracy |>
+  select(Pipe, .model, RMSE, MAE)
+```
+
+```{r}
+water_accuracy |>
+  ggplot(aes(x = .model, y = RMSE, fill = Pipe)) +
+  geom_col(position = "dodge") +
+  labs(
+    title = "Forecast Model Comparison",
+    x = "Forecasting Model",
+    y = "Test RMSE"
+  )
+```
+
+### Interpretation: Forecasting Model Comparison
+
+Three forecasting models were evaluated for both water-flow series: MEAN, ETS, and ARIMA. The models were compared using Root Mean Squared Error (RMSE) and Mean Absolute Error (MAE), with the final 48 hours of each series reserved for testing.
+
+For Pipe1, ARIMA achieved the lowest test RMSE of 3.9381 and MAE of 3.0208, slightly outperforming ETS and MEAN. However, the differences among the three models were very small, indicating that more complex models provided little improvement over the baseline.
+
+For Pipe2, ETS achieved the lowest test RMSE of 17.0962 and MAE of 13.7128. Its performance was almost identical to the MEAN model, while ARIMA produced slightly larger forecast errors.
+
+Based on the out-of-sample evaluation, ARIMA was selected for Pipe1 and ETS for Pipe2. These selections are provisional because the evaluation used a 48-hour forecast horizon, whereas the final assignment requires a seven-day forecast.
+
+Overall, the results suggest that the water-flow series have relatively weak predictable temporal structure, making simple forecasting approaches competitive with more complex models.
+
+## The selected models using the complete datasets
+
+```{r}
+# Fit selected models separately
+final_models <- water_complete |>
+  model(
+    ARIMA = ARIMA(water_flow),
+    ETS = ETS(water_flow)
+  )
+selected_models <- final_models |>
+  select(Pipe, ARIMA, ETS)
+
+selected_models |>
+  augment() |>
+  filter(
+    (Pipe == "Pipe1" & .model == "ARIMA") |
+      (Pipe == "Pipe2" & .model == "ETS")
+  ) |>
+  as_tsibble(
+    key = c(Pipe, .model),
+    index = date_time
+  ) |>
+  ACF(.innov, lag_max = 48) |>
+  autoplot()
+
+selected_models |>
+  augment() |>
+  filter(
+    (Pipe == "Pipe1" & .model == "ARIMA") |
+      (Pipe == "Pipe2" & .model == "ETS")
+  ) |>
+  group_by(Pipe, .model) |>
+  features(
+    .innov,
+    ljung_box,
+    lag = 24,
+    dof = 0
+  )
+
+# Generate 168-hour forecasts
+final_forecasts <- final_models |>
+  forecast(h = 168) |>
+  filter(
+    (Pipe == "Pipe1" & .model == "ARIMA") |
+      (Pipe == "Pipe2" & .model == "ETS")
+  )
+
+final_forecasts
+
+```
+
+### Interpretation: Residual Diagnostics
+
+Residual diagnostics were performed to evaluate whether the selected forecasting models adequately captured the temporal dependence in the hourly water-flow data.
+
+For Pipe1, the ARIMA model produced a Ljung–Box statistic of 22.0341 and a p-value of 0.5772. Since the p-value exceeds the 0.05 significance level, the null hypothesis of no residual autocorrelation up to lag 24 cannot be rejected.
+
+For Pipe2, the ETS model produced a Ljung–Box statistic of 32.4628 and a p-value of 0.1159. This result also fails to reject the null hypothesis at the 5% significance level, although a few individual autocorrelations exceed the confidence bounds in the residual ACF plot.
+
+Overall, the residual diagnostics provide no significant evidence of remaining autocorrelation through lag 24. These findings support the adequacy of the selected ARIMA and ETS models for capturing the main temporal structure of the data.
+
+However, these results do not guarantee forecast accuracy, particularly over the longer seven-day forecasting horizon.
+
+## Visualize the seven day forecasts
+
+```{r}
+final_forecasts |>
+  autoplot(water_complete, level = c(80, 95)) +
+  facet_wrap(~ Pipe, scales = "free_y") +
+  labs(
+    title = "Seven-Day Water Flow Forecast",
+    x = "Date and Time",
+    y = "Forecast Water Flow"
+  )
+```
+
+### Interpretation: Seven-Day Water Flow Forecast
+
+A seven-day forecast was generated for both water-flow series, corresponding to 168 future hourly observations per pipe. The ARIMA model was selected for Pipe1, while the ETS model was selected for Pipe2 based on their performance during the 48-hour out-of-sample evaluation.
+
+For Pipe1, the forecast remains approximately constant around 20 units of water flow. The relatively stable predictions suggest that the selected ARIMA model does not identify a strong trend or seasonal pattern that would substantially change expected water flow over the forecasting horizon.
+
+For Pipe2, the ETS forecast remains approximately constant around 40 units. The prediction intervals are considerably wider than those of Pipe1, reflecting the greater variability in Pipe2's historical measurements.
+
+The 80% and 95% prediction intervals represent uncertainty around the forecast values. The wider 95% intervals indicate a greater range of plausible future observations.
+
+Overall, both models predict relatively stable average water flow during the following seven days. However, the wide prediction intervals, particularly for Pipe2, indicate considerable uncertainty in individual hourly measurements. These forecasts may be useful for estimating typical water-flow levels, but they are less reliable for predicting sudden fluctuations or extreme observations.
+
+## Export the forecast to excel
+
+```{r}
+library(writexl)
+
+# Hourly forecast
+hourly_forecast <- final_forecasts |>
+  as_tibble() |>
+  transmute(
+    Pipe,
+    Date_Time = date_time,
+    Model = .model,
+    Forecast_Water_Flow = .mean
+  )
+
+# Daily summary
+daily_forecast <- hourly_forecast |>
+  mutate(Date = as.Date(Date_Time)) |>
+  group_by(Pipe, Date) |>
+  summarise(
+    Average_Water_Flow = mean(Forecast_Water_Flow),
+    .groups = "drop"
+  )
+
+write_xlsx(
+  list(
+    Hourly_Forecast = hourly_forecast,
+    Daily_Summary = daily_forecast
+  ),
+  "Water_Flow_7_Day_Forecasts.xlsx"
+)
+```
+
+## Conclusion
+
+The objective of this project was to analyze and forecast hourly water-flow measurements from two pipes using time series forecasting methods.
+
+The datasets were cleaned, aligned to an hourly time base, and aggregated using the mean for multiple observations within each hour. Four missing hourly observations were identified for Pipe1 and estimated using linear interpolation, while Pipe2 contained no missing hours after correcting timestamp precision.
+
+Stationarity was evaluated using the KPSS test and the recommended number of differences. Both series produced KPSS p-values of 0.10 and required zero nonseasonal differences, suggesting that both series were consistent with level stationarity.
+
+Three forecasting methods—MEAN, ETS, and ARIMA—were evaluated using a 48-hour test period. ARIMA produced the lowest RMSE for Pipe1 (3.9381), while ETS performed best for Pipe2 (17.0962). However, the differences between competing models were small.
+
+The selected models were refitted to the complete datasets to generate seven-day forecasts. Pipe1 was forecast to remain near 20 units of water flow, while Pipe2 was forecast to remain near 40 units. Pipe2 exhibited wider prediction intervals, indicating greater uncertainty.
+
+Overall, both datasets appear suitable for forecasting typical water-flow levels. However, the relatively weak autocorrelation, substantial short-term variability, and limited validation horizon suggest that the forecasts should be interpreted cautiously, particularly when predicting individual hourly measurements.
