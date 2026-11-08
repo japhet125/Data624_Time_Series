@@ -1,0 +1,765 @@
+---
+title: "Linear Regression and its cousin"
+author: "Guibril Ramde"
+format:
+  html: default
+  pdf: default
+---
+
+## **Part: 6.2.**
+
+(a) **Start R and use these commands to load the data:**
+
+```{r}
+library(tidyverse)
+library(fpp3)
+library(AppliedPredictiveModeling)
+library(caret)
+
+data(permeability)
+head(permeability, 15)
+#head(fingerprints, 5)
+
+dim(permeability)
+dim(fingerprints)
+
+str(permeability)
+str(fingerprints)
+
+```
+
+## **Exploratory Data Analysis**
+
+```{r}
+# missing values
+sum(is.na(permeability))
+sum(is.na(fingerprints))
+
+
+summary(permeability)
+# Count of presence of each molecular substructure
+fingerprint_counts <- colSums(fingerprints, dims = 1)
+# summary of frequencies
+summary(fingerprint_counts)
+# predictor that are not present 0
+sum(fingerprint_counts == 0)
+# number of occurance < 5
+sum(fingerprint_counts < 5)
+```
+
+```{r}
+# visualize the fingerprints data
+fingerprint_df <- tibble(
+  Frequency = as.numeric(fingerprint_counts)
+)
+
+ggplot(fingerprint_df, aes(x = Frequency)) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    color = "black"
+  ) +
+  labs(
+    title = "Distribution of Molecular Fingerprint Frequencies",
+    x = "Number of Molecules Containing Substructure",
+    y = "Number of Predictors"
+  ) +
+  theme_minimal()
+```
+
+## **Interpretation**
+
+If most predictors have frequencies close to zero, it means many molecular substructures occur in only a small number of molecules. These sparse predictors may provide limited information for regression modeling.
+
+**b. The fingerprint predictors indicate the presence or absence of substructures of a molecule and are often sparse meaning that relatively few of the molecules contain each substructure. Filter out the predictors that have low frequencies using the `nearZeroVar` function from the caret package. How many predictors are left for modeling?**
+
+```{r}
+# Identify near-zero variance predictor
+nzv <- nearZeroVar(fingerprints)
+
+# number of predictor before filtering
+ncol(fingerprints)
+
+length(nzv)
+```
+
+```{r}
+# remove near - zero - variance predictors
+fingerprints_filtered <- fingerprints[, -nzv, drop = FALSE]
+
+# number of predictor remaining
+ncol(fingerprints_filtered)
+
+nzv_details <- nearZeroVar(fingerprints, saveMetrics = TRUE)
+head(nzv_details, 10)
+table(nzv_details$nzv)
+
+```
+
+## Interpretation:
+
+The fingerprint dataset initially contained `1107` predictors. I applied the `nearZeroVar()` function from the `caret` package to identify predictors with little or no variation. After removing `719` predictors, `388` predictors remained for modeling. This preprocessing step reduces the number of uninformative predictors and may improve computational efficiency.
+
+## **c. Split the data into a training and a test set, pre-process the data, and tune a PLS model. How many latent variables are optimal and what is the corresponding resampled estimate of R2?**
+
+```{r}
+# Combine predictors and target
+model_data <- as.data.frame(fingerprints) |>
+  mutate(Permeability = as.numeric(permeability))
+
+# Verify dimensions
+dim(model_data)
+
+# Check target
+summary(model_data$Permeability)
+
+# Check missing values
+sum(is.na(model_data$Permeability))
+```
+
+```{r}
+set.seed(42)
+
+train_index <- createDataPartition(
+  y = model_data$Permeability,
+  p = 0.80,
+  list = FALSE
+)
+
+train_data <- model_data[train_index, ]
+test_data <- model_data[-train_index, ]
+
+dim(train_data)
+dim(test_data)
+```
+
+```{r}
+# Predictors
+x_train <- train_data |>
+  select(-Permeability)
+
+x_test <- test_data |>
+  select(-Permeability)
+
+# Convert target to numeric vectors
+y_train <- as.numeric(train_data$Permeability)
+y_test <- as.numeric(test_data$Permeability)
+
+# Verify
+class(y_train)
+is.numeric(y_train)
+length(y_train)
+summary(y_train)
+
+# Check dimensions
+dim(x_train)
+dim(x_test)
+
+length(y_train)
+length(y_test)
+```
+
+```{r}
+# Identify near-zero variance predictors
+nzv_train <- nearZeroVar(x_train)
+
+# Filter training and testing predictors
+keep_cols <- setdiff(seq_len(ncol(x_train)), nzv_train)
+
+x_train_filtered <- x_train[, keep_cols, drop = FALSE]
+x_test_filtered <- x_test[, keep_cols, drop = FALSE]
+
+# Verify dimensions
+dim(x_train_filtered)
+dim(x_test_filtered)
+
+nrow(fingerprints)
+length(permeability)
+ncol(x_train_filtered)
+
+```
+
+```{r}
+#install.packages("pls")
+library(caret)
+library(pls)
+
+set.seed(42)
+
+# Configure repeated cross-validation
+train_control <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 3
+)
+
+# Train the PLS regression model
+pls_model <- train(
+  x = x_train_filtered,
+  y = y_train,
+  method = "pls",
+  preProcess = c("center", "scale"),
+  tuneGrid = expand.grid(ncomp = 1:30),
+  trControl = train_control,
+  metric = "Rsquared"
+)
+
+# Display model summary
+print(pls_model)
+```
+
+```{r}
+# Optimal number of latent variables
+pls_model$bestTune
+
+# Corresponding resampled R-squared
+best_result <- pls_model$results |>
+  filter(ncomp == pls_model$bestTune$ncomp)
+
+best_result |>
+  select(ncomp, RMSE, Rsquared)
+```
+
+```{r}
+ggplot(pls_model$results, aes(x = ncomp, y = Rsquared)) +
+  geom_line(color = "steelblue") +
+  geom_point(color = "darkblue") +
+  geom_vline(
+    xintercept = pls_model$bestTune$ncomp,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  labs(
+    title = "PLS Regression: Cross-Validated R-Squared",
+    x = "Number of Latent Variables",
+    y = "Cross-Validated R-Squared"
+  ) +
+  theme_minimal()
+```
+
+### Interpretation: Training and Test Data Preparation
+
+The data set contains 165 molecular observations and 1,107 fingerprint predictors. The data were divided into a training set containing 133 observations (approximately 80%) and a testing set containing 32 observations (approximately 20%).
+
+Near-zero-variance filtering was applied to the training predictors to remove variables with little or no variation. Of the original 1,107 predictors, 714 were removed, leaving 393 predictors for model development. The same predictor columns were retained in the testing data set to ensure consistency.
+
+The response variable is molecular permeability, which is continuous. Therefore, Partial Least Squares regression was selected to predict permeability from the molecular fingerprint predictors.
+
+(d) **Predict the response for the test set. What is the test set estimate of R2?**
+
+```{r}
+# Predict molecular permeability for the test set
+pls_predictions <- predict(
+  pls_model,
+  newdata = x_test_filtered
+)
+
+# View predictions
+head(pls_predictions)
+# Calculate RMSE, R-squared, and MAE
+pls_test_results <- postResample(
+  pred = pls_predictions,
+  obs = y_test
+)
+
+pls_test_results
+# Visualize
+pls_test_df <- tibble(
+  Actual = y_test,
+  Predicted = as.numeric(pls_predictions)
+)
+
+ggplot(pls_test_df, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "steelblue", size = 2.5) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  labs(
+    title = "PLS Regression: Actual vs Predicted Permeability",
+    x = "Actual Permeability",
+    y = "Predicted Permeability"
+  ) +
+  theme_minimal()
+```
+
+(d) **Interpretation:** Actual vs. Predicted Permeability
+
+```         
+The scatterplot compares the actual permeability values with the values predicted by the Partial Least Squares (PLS) regression model. The red dashed line represents perfect predictions, where the predicted values equal the actual values.
+
+The results show that several observations are far from the reference line, indicating substantial prediction errors. The model tends to underestimate permeability for molecules with high actual values, while overestimating permeability for some molecules with low actual values. Additionally, the model produces a negative prediction for one observation, which is not physically meaningful.
+
+The test-set R² of 0.3561 and RMSE of 13.0724 indicate limited predictive performance. Therefore, the PLS model may provide approximate permeability estimates, but its accuracy is insufficient to reliably replace laboratory measurements.
+```
+
+<!-- -->
+
+(e) **Try building other models discussed in this chapter. Do any have better predictive performance?**
+
+```{r}
+#install.packages("glmnet")
+library(glmnet)
+
+set.seed(42)
+
+ridge_model <- train(
+  x = x_train_filtered,
+  y = y_train,
+  method = "glmnet",
+  preProcess = c("center", "scale"),
+  tuneGrid = expand.grid(
+    alpha = 0,
+    lambda = 10^seq(-4, 2, length.out = 50)
+  ),
+  trControl = train_control,
+  metric = "Rsquared"
+)
+
+ridge_model$bestTune
+
+## Lasso Regression
+set.seed(42)
+
+lasso_model <- train(
+  x = x_train_filtered,
+  y = y_train,
+  method = "glmnet",
+  preProcess = c("center", "scale"),
+  tuneGrid = expand.grid(
+    alpha = 1,
+    lambda = 10^seq(-4, 2, length.out = 50)
+  ),
+  trControl = train_control,
+  metric = "Rsquared"
+)
+
+lasso_model$bestTune
+# Evaluate both models
+# Ridge predictions
+ridge_predictions <- predict(
+  ridge_model,
+  newdata = x_test_filtered
+)
+
+# Lasso predictions
+lasso_predictions <- predict(
+  lasso_model,
+  newdata = x_test_filtered
+)
+
+# Test performance
+ridge_results <- postResample(
+  ridge_predictions,
+  y_test
+)
+
+lasso_results <- postResample(
+  lasso_predictions,
+  y_test
+)
+
+```
+
+```{r}
+# Compare all three models
+model_comparison <- tibble(
+  Model = c("PLS", "Ridge", "Lasso"),
+  RMSE = c(
+    pls_test_results["RMSE"],
+    ridge_results["RMSE"],
+    lasso_results["RMSE"]
+  ),
+  Rsquared = c(
+    pls_test_results["Rsquared"],
+    ridge_results["Rsquared"],
+    lasso_results["Rsquared"]
+  ),
+  MAE = c(
+    pls_test_results["MAE"],
+    ridge_results["MAE"],
+    lasso_results["MAE"]
+  )
+)
+
+model_comparison
+```
+
+```{r}
+ggplot(model_comparison, aes(x = Model, y = Rsquared, fill = Model)) +
+  geom_col(width = 0.6) +
+  labs(
+    title = "Comparison of Regression Models",
+    x = "Regression Model",
+    y = "Test Set R-Squared"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+### Interpretation: Comparison of Regression Models
+
+Three regression models were evaluated to predict molecular permeability: Partial Least Squares (PLS), Ridge Regression, and Lasso Regression. Their predictive performances were compared using R-squared (R²), Root Mean Squared Error (RMSE), and Mean Absolute Error (MAE).
+
+Ridge Regression achieved the best predictive performance, with an R² of 0.5832, RMSE of 10.6637, and MAE of 8.1449. PLS Regression achieved an R² of 0.3561, while Lasso Regression had the lowest R² of 0.3239.
+
+These results indicate that Ridge Regression performs better than the other two models on the testing data set. Ridge Regression may be more effective because it reduces the influence of individual predictors through regularization while retaining information from all predictors.
+
+Therefore, Ridge Regression is the preferred model among the three approaches evaluated. However, further validation would be necessary to confirm its reliability on new molecular observations.
+
+**f. Would you recommend any of your models to replace the permeability laboratory experiment?**
+
+### Interpretation: Recommendation
+
+Based on the results, I would not recommend replacing the laboratory permeability experiment entirely with any of the regression models.
+
+Although Ridge Regression achieved the highest R² of 0.5832 and the lowest RMSE of 10.6637, its predictions still contain substantial errors. This suggests that the model does not fully capture the relationship between molecular fingerprints and permeability.
+
+Additionally, the data set contains only 165 molecular observations, with 32 observations used for testing. This relatively small testing data set limits our confidence in the model's ability to generalize to new molecules.
+
+However, Ridge Regression could be useful as a preliminary screening tool to estimate molecular permeability and identify molecules that require further laboratory testing. Additional observations, external validation, and further model improvement would be necessary before considering it a replacement for laboratory experiments.
+
+# **Part 6.3**
+
+a\. **Start R and use these commands to load the data: \> library(AppliedPredictiveModeling) \> data(chemicalManufacturingProcess) The matrix processPredictors contains the 57 predictors (12 describing the input biological material and 45 describing the process predictors) for the 176 manufacturing runs. yield contains the percent yield for each run.**
+
+**Exploratory Data Analysis**
+
+```{r}
+data(ChemicalManufacturingProcess)
+head(ChemicalManufacturingProcess)
+
+nrow(ChemicalManufacturingProcess)
+dim(ChemicalManufacturingProcess)
+
+sum(is.na(ChemicalManufacturingProcess))
+
+str(ChemicalManufacturingProcess)
+names(ChemicalManufacturingProcess)
+
+summary(ChemicalManufacturingProcess)
+
+
+
+```
+
+**b. A small percentage of cells in the predictor set contain missing values. Use an imputation function to fill in these missing values (e.g., see Sect. 3.8).**
+
+```{r}
+## Separate predictors and response
+process_predictors <- ChemicalManufacturingProcess |>
+  select(-Yield)
+
+yield <- as.numeric(ChemicalManufacturingProcess$Yield)
+
+# Missing values in predictors
+sum(is.na(process_predictors))
+
+# Number of missing values per predictor
+missing_counts <- colSums(is.na(process_predictors))
+
+# Display only predictors with missing values
+missing_counts[missing_counts > 0]
+
+```
+
+**c. Split the data into a training and a test set, pre-process the data, and tune a model of your choice from this chapter. What is the optimal value of the performance metric?**
+
+```{r}
+library(caret)
+library(glmnet)
+library(tidyverse)
+
+set.seed(42)
+
+train_index <- createDataPartition(
+  y = yield,
+  p = 0.80,
+  list = FALSE
+)
+
+x_train <- process_predictors[train_index, ]
+x_test <- process_predictors[-train_index, ]
+
+y_train <- yield[train_index]
+y_test <- yield[-train_index]
+
+dim(x_train)
+dim(x_test)
+
+length(y_train)
+length(y_test)
+```
+
+```{r}
+# Define preprocessing using training data only
+preprocess_model <- preProcess(
+  x_train,
+  method = c("medianImpute", "nzv", "center", "scale")
+)
+
+# Apply the same preprocessing to both datasets
+x_train_processed <- predict(preprocess_model, x_train)
+x_test_processed <- predict(preprocess_model, x_test)
+
+# Verify missing values
+sum(is.na(x_train_processed))
+sum(is.na(x_test_processed))
+
+# Check dimensions
+dim(x_train_processed)
+dim(x_test_processed)
+
+set.seed(42)
+
+train_control <- trainControl(
+  method = "repeatedcv",
+  number = 10,
+  repeats = 3
+)
+
+ridge_model <- caret::train(
+  x = x_train,
+  y = y_train,
+  method = "glmnet",
+  preProcess = c("medianImpute", "nzv", "center", "scale"),
+  tuneGrid = expand.grid(
+    alpha = 0,
+    lambda = 10^seq(-4, 2, length.out = 50)
+  ),
+  trControl = train_control,
+  metric = "RMSE"
+)
+
+print(ridge_model)
+```
+
+```{r}
+# Best tuning parameters
+ridge_model$bestTune
+
+# Results at optimal lambda
+best_ridge <- ridge_model$results |>
+  filter(lambda == ridge_model$bestTune$lambda)
+
+best_ridge |>
+  select(alpha, lambda, RMSE, Rsquared, MAE)
+# Visualize
+ggplot(ridge_model$results, aes(x = lambda, y = RMSE)) +
+  geom_line(color = "steelblue") +
+  geom_point(color = "darkblue", size = 1.5) +
+  scale_x_log10() +
+  labs(
+    title = "Ridge Regression: Cross-Validated RMSE",
+    x = "Regularization Parameter (Lambda)",
+    y = "Cross-Validated RMSE"
+  ) +
+  theme_minimal()
+
+# Predict test observations
+ridge_predictions <- predict(
+  ridge_model,
+  newdata = x_test
+)
+
+# Test-set performance
+ridge_test_results <- postResample(
+  pred = ridge_predictions,
+  obs = y_test
+)
+
+ridge_test_results
+
+# Verify imputation
+cat("Missing values before imputation:",
+    sum(is.na(x_train)), "\n")
+
+cat("Missing values after imputation:",
+    sum(is.na(x_train_processed)), "\n")
+
+cat("Missing values in processed test data:",
+    sum(is.na(x_test_processed)), "\n")
+```
+
+### Interpretation: Ridge Regression Model
+
+The Chemical Manufacturing Process data set contains 176 observations and 57 predictor variables. The response variable is manufacturing yield, expressed as a percentage.
+
+The data set was divided into training and testing sets, and missing predictor values were handled using median imputation. Near-zero-variance filtering, centering, and scaling were applied during model preprocessing.
+
+Ridge Regression was selected to predict manufacturing yield. Repeated 10-fold cross-validation was used to tune the regularization parameter, lambda, with RMSE as the performance metric.
+
+The model achieved a cross-validated RMSE of approximately 1.4073. This indicates that the model's prediction errors have a root mean squared magnitude of approximately 1.41 percentage points during cross-validation.
+
+**d. Predict the response for the test set. What is the value of the performance metric and how does this compare with the resampled performance metric on the training set?**
+
+```{r}
+# Predict response for the test set
+ridge_predictions <- predict(
+  ridge_model,
+  newdata = x_test
+)
+
+# Calculate test performance
+ridge_test_results <- postResample(
+  pred = ridge_predictions,
+  obs = y_test
+)
+
+ridge_test_results
+
+# Compare training CV and test RMSE
+performance_comparison <- tibble(
+  Dataset = c("Cross-validation", "Test"),
+  RMSE = c(
+    min(ridge_model$results$RMSE),
+    unname(ridge_test_results["RMSE"])
+  )
+)
+
+performance_comparison
+
+# Create prediction data
+ridge_test_df <- tibble(
+  Actual = y_test,
+  Predicted = as.numeric(ridge_predictions)
+)
+
+# Plot
+ggplot(ridge_test_df, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "steelblue", size = 2.5) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  labs(
+    title = "Ridge Regression: Actual vs Predicted Yield",
+    x = "Actual Yield (%)",
+    y = "Predicted Yield (%)"
+  ) +
+  theme_minimal()
+```
+
+### Interpretation: Test-Set Performance
+
+The Ridge Regression model was evaluated on the testing data set to determine its predictive performance on unseen observations.
+
+The model achieved a test RMSE of approximately 1.2210, compared with a cross-validated RMSE of 1.4073. The lower test RMSE indicates that the model performed slightly better on the held-out observations than during cross-validation.
+
+The actual-versus-predicted scatterplot shows that several observations are close to the diagonal reference line, indicating reasonably accurate predictions. However, some observations are farther from the line, showing that prediction errors remain.
+
+Overall, the results suggest that Ridge Regression provides useful predictions of manufacturing yield, although additional testing would help establish its reliability on future manufacturing runs.
+
+**e. Which predictors are most important in the model you have trained? Do either the biological or process predictors dominate the list?**
+
+```{r}
+# Variable importance
+ridge_importance <- varImp(
+  ridge_model,
+  scale = TRUE
+)
+
+# View importance
+ridge_importance
+
+# Plot top 20 predictors
+plot(ridge_importance, top = 20)
+
+```
+
+```{r}
+importance_df <- ridge_importance$importance |>
+  tibble::rownames_to_column("Predictor") |>
+  arrange(desc(Overall))
+
+top_15 <- importance_df |>
+  slice_head(n = 15)
+
+top_15
+
+ggplot(top_15,
+       aes(x = reorder(Predictor, Overall),
+           y = Overall)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Top 15 Important Predictors: Ridge Regression",
+    x = "Predictor",
+    y = "Variable Importance"
+  ) +
+  theme_minimal()
+names(process_predictors)
+top_15$Predictor
+```
+
+### Interpretation: Important Predictors
+
+The variable importance analysis identified the predictors that contributed most strongly to the Ridge Regression model.
+
+The five most important predictors were ManufacturingProcess32, ManufacturingProcess09, ManufacturingProcess36, ManufacturingProcess13, and ManufacturingProcess17. ManufacturingProcess32 had the highest relative importance.
+
+Among the top 15 predictors, 13 were manufacturing process variables, while only two were biological material variables: BiologicalMaterial03 and BiologicalMaterial06.
+
+These findings indicate that manufacturing process variables dominate the list of important predictors. This suggests that process conditions may play an important role in predicting manufacturing yield. However, the importance rankings do not establish a causal relationship between the predictors and yield.
+
+**f. Explore the relationships between each of the top predictors and the response. How could this information be helpful in improving yield in future runs of the manufacturing process?**
+
+```{r}
+top_5_predictors <- top_15 |>
+  slice_head(n = 5) |>
+  pull(Predictor)
+
+top_5_predictors
+
+# Prepare the data
+relationship_data <- x_train |>
+  mutate(Yield = y_train) |>
+  select(Yield, all_of(top_5_predictors)) |>
+  pivot_longer(
+    cols = -Yield,
+    names_to = "Predictor",
+    values_to = "Value"
+  ) |>
+  filter(!is.na(Value), !is.na(Yield))
+# Plot the relationship
+ggplot(
+  relationship_data,
+  aes(x = Value, y = Yield)
+) +
+  geom_point(
+    color = "steelblue",
+    alpha = 0.6
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    color = "red",
+    na.rm = TRUE
+  ) +
+  facet_wrap(
+    ~ Predictor,
+    scales = "free_x"
+  ) +
+  labs(
+    title = "Relationships Between Top Predictors and Yield",
+    x = "Predictor Value",
+    y = "Manufacturing Yield (%)"
+  ) +
+  theme_minimal()
+```
+
+### Interpretation: Relationships Between Important Predictors and Manufacturing Yield
+
+The relationships between the five most important predictors and manufacturing yield were examined using scatterplots with fitted linear regression lines.
+
+ManufacturingProcess32 and ManufacturingProcess09 showed positive relationships with yield. This indicates that manufacturing runs with higher values of these predictors generally achieved higher yields.
+
+In contrast, ManufacturingProcess36, ManufacturingProcess13, and ManufacturingProcess17 showed negative relationships with yield. Higher values of these predictors were generally associated with lower manufacturing yields.
+
+These findings suggest that understanding and monitoring important manufacturing process variables may help improve production efficiency. For example, future experiments could investigate whether adjusting process conditions associated with higher yields leads to improved manufacturing performance.
+
+However, these relationships are observational and do not establish causation. Controlled experiments and further analysis would be necessary to determine which process adjustments can reliably increase yield.
