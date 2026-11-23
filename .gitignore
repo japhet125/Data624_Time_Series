@@ -1,4 +1,16 @@
+# Quarto generated files
+*_files/
+*.html
+*.pdf
+
+# R temporary files
+.Rhistory
+.RData
 .Rproj.user/
+
+# Quarto cache
+.quarto/
+*_cache/.Rproj.user/
 homework2_files/
 rsconnect/
 homework3_files/
