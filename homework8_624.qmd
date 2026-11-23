@@ -1,0 +1,1080 @@
+---
+title: "Non Linear Models (KNN, MARS, SVM, NEURAL NETWORKS)"
+author: "Guibril Ramde"
+format:
+  html: default
+  pdf: default
+editor: visual
+---
+
+## Exercise 7.2
+
+```{r}
+#install.packages('kernlab')
+library(mlbench)
+library(tidyverse)
+library(ggplot2)
+library(caret)
+library(earth)
+library(ipred)
+library(e1071)
+library(kernlab)
+#library(randomForest)
+
+set.seed(200)
+
+# Training dataset: 200 observations
+trainingData <- mlbench.friedman1(200, sd = 1)
+trainingData$x <- as.data.frame(trainingData$x)
+
+# Testing dataset: 5000 observations
+testData <- mlbench.friedman1(5000, sd = 1)
+testData$x <- as.data.frame(testData$x)
+
+# Exploratory analysis
+dim(trainingData$x)
+summary(trainingData$x)
+summary(trainingData$y)
+
+# Examine predictors and response
+featurePlot(
+  x = trainingData$x,
+  y = trainingData$y
+)
+
+folds <- createFolds(
+  trainingData$y,
+  k = 10,
+  returnTrain = TRUE
+)
+
+control <- trainControl(
+  method = "cv",
+  number = 10,
+  index = folds
+)
+```
+
+```{r}
+# tune several models on these data
+set.seed(200)
+
+knnModel <- train(
+  x = trainingData$x,
+  y = trainingData$y,
+  method = "knn",
+  preProcess = c("center", "scale"),
+  trControl = control,
+  tuneLength = 10
+)
+
+knnModel
+
+# Predictions
+knnPred <- predict(
+  knnModel,
+  newdata = testData$x
+)
+
+# Evaluation
+postResample(
+  pred = knnPred,
+  obs = testData$y
+)
+set.seed(200)
+
+folds <- createFolds(
+  trainingData$y,
+  k = 10,
+  returnTrain = TRUE
+)
+
+control <- trainControl(
+  method = "cv",
+  number = 10,
+  index = folds
+)
+```
+
+```{r}
+set.seed(200)
+
+marsModel <- train(
+  x = trainingData$x,
+  y = trainingData$y,
+  method = "earth",
+  trControl = control,
+  tuneGrid = expand.grid(
+    nprune = 2:20,
+    degree = 1:2
+  )
+)
+
+marsModel
+
+# Predictions
+marsPred <- predict(
+  marsModel,
+  newdata = testData$x
+)
+
+# Evaluation
+postResample(
+  pred = marsPred,
+  obs = testData$y
+)
+
+# Variable importance
+varImp(marsModel)
+
+# Plot variable importance
+plot(varImp(marsModel))
+
+# MARS model summary
+summary(marsModel$finalModel)
+```
+
+```{r}
+# SVM 
+set.seed(200)
+
+svmLinearModel <- train(
+  x = trainingData$x,
+  y = trainingData$y,
+  method = "svmLinear",
+  preProcess = c("center", "scale"),
+  trControl = control,
+  tuneLength = 10
+)
+
+svmLinearModel
+
+# Predictions
+svmLinearPred <- predict(
+  svmLinearModel,
+  newdata = testData$x
+)
+
+postResample(
+  pred = svmLinearPred,
+  obs = testData$y
+)
+```
+
+```{r}
+set.seed(200)
+
+svmRadialModel <- train(
+  x = trainingData$x,
+  y = trainingData$y,
+  method = "svmRadial",
+  preProcess = c("center", "scale"),
+  trControl = control,
+  tuneLength = 10
+)
+
+svmRadialModel
+
+# Predictions
+svmRadialPred <- predict(
+  svmRadialModel,
+  newdata = testData$x
+)
+
+postResample(
+  pred = svmRadialPred,
+  obs = testData$y
+)
+```
+
+```{r}
+#Neural Networks
+set.seed(200)
+
+nnetModel <- train(
+  x = trainingData$x,
+  y = trainingData$y,
+  method = "nnet",
+  preProcess = c("center", "scale"),
+  trControl = control,
+  tuneGrid = expand.grid(
+    size = c(1, 3, 5, 7, 10),
+    decay = c(0, 0.001, 0.01, 0.1)
+  ),
+  linout = TRUE,
+  trace = FALSE,
+  maxit = 500,
+  MaxNWts = 2000
+)
+
+nnetModel
+
+# Predictions
+nnetPred <- predict(
+  nnetModel,
+  newdata = testData$x
+)
+
+postResample(
+  pred = nnetPred,
+  obs = testData$y
+)
+```
+
+**##Compare all five models**
+
+```{r}
+# Collect all predictions
+predictions <- list(
+  KNN = knnPred,
+  MARS = marsPred,
+  SVM_Linear = svmLinearPred,
+  SVM_Radial = svmRadialPred,
+  Neural_Network = nnetPred
+ 
+)
+
+# Calculate evaluation metrics
+model_results <- lapply(
+  predictions,
+  function(pred) {
+    postResample(
+      pred = pred,
+      obs = testData$y
+    )
+  }
+)
+
+# Convert results to a data frame
+comparison <- bind_rows(
+  model_results,
+  .id = "Model"
+) |>
+  arrange(RMSE)
+
+comparison
+```
+
+**##Visualize the models performance**
+
+```{r}
+ggplot(
+  comparison,
+  aes(
+    x = reorder(Model, RMSE),
+    y = RMSE,
+    fill = Model
+  )
+) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "RMSE Comparison Across Regression Models",
+    x = "Model",
+    y = "Test RMSE"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Visualize the R-square 
+ggplot(
+  comparison,
+  aes(
+    x = reorder(Model, Rsquared),
+    y = Rsquared,
+    fill = Model
+  )
+) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "R-squared Comparison Across Models",
+    x = "Model",
+    y = "Test R-squared"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+#Comapre the predicted vs the actual
+predicted_data <- bind_rows(
+  lapply(
+    names(predictions),
+    function(name) {
+      tibble(
+        Model = name,
+        Actual = testData$y,
+        Predicted = predictions[[name]]
+      )
+    }
+  )
+)
+
+ggplot(
+  predicted_data,
+  aes(x = Actual, y = Predicted)
+) +
+  geom_point(alpha = 0.2) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    color = "red",
+    linewidth = 1
+  ) +
+  facet_wrap(~ Model, scales = "fixed") +
+  labs(
+    title = "Actual vs Predicted Values",
+    x = "Actual Values",
+    y = "Predicted Values"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Best Model
+best_model <- comparison |>
+  slice_min(
+    order_by = RMSE,
+    n = 1,
+    with_ties = FALSE
+  )
+
+best_model
+```
+
+### Interpretation
+
+The MARS model performed better than the other five regression models because it achieved the lowest RMSE on the test dataset. This indicates that MARS produced more accurate predictions compared to KNN, linear SVM, radial SVM, Neural Network.
+
+Additionally, the actual versus predicted plot shows that the MARS predictions are closely aligned with the actual values, indicating a good model fit. Since the Friedman dataset contains nonlinear relationships and interactions between predictors, MARS can effectively capture these patterns using piecewise regression functions.
+
+Based on the RMSE results and the actual versus predicted plot, MARS is the best-performing model among the six models evaluated in this analysis.
+
+**##Exercise 7.5**
+
+Exercise 6.3 describes data for a chemical manufacturing process. Use the same data imputation, data splitting, and pre-processing steps as before and train several nonlinear regression models.
+
+```{r}
+library(tidyverse)
+library(AppliedPredictiveModeling)
+library(caret)
+library(earth)
+library(kernlab)
+library(nnet)
+
+set.seed(42)
+
+data(ChemicalManufacturingProcess)
+
+# Dataset exploration
+head(ChemicalManufacturingProcess)
+dim(ChemicalManufacturingProcess)
+str(ChemicalManufacturingProcess)
+summary(ChemicalManufacturingProcess)
+
+# Missing values
+sum(is.na(ChemicalManufacturingProcess))
+colSums(is.na(ChemicalManufacturingProcess))
+```
+
+**##Exploratory data analysis**
+
+```{r}
+yield_plot <- ggplot(
+  ChemicalManufacturingProcess,
+  aes(x = Yield)
+) +
+  geom_histogram(
+    bins = 20,
+    fill = "steelblue",
+    color = "black"
+  ) +
+  labs(
+    title = "Distribution of Chemical Manufacturing Yield",
+    x = "Yield (%)",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+
+print(yield_plot)
+
+ggsave(
+  "MARS_yield_distribution.png",
+  yield_plot,
+  width = 9,
+  height = 5.5,
+  dpi = 300
+)
+
+# Missing values by predictor
+missing_by_variable <- sort(
+  colSums(is.na(ChemicalManufacturingProcess)),
+  decreasing = TRUE
+)
+
+head(missing_by_variable, 15)
+```
+
+```{r}
+# Remove observations with missing response
+model_data <- ChemicalManufacturingProcess |>
+  filter(!is.na(Yield))
+
+set.seed(42)
+
+train_index <- createDataPartition(
+  model_data$Yield,
+  p = 0.80,
+  list = FALSE
+)
+
+train_data <- model_data[train_index, , drop = FALSE]
+test_data <- model_data[-train_index, , drop = FALSE]
+
+# Preprocessing
+preprocess_model <- preProcess(
+  train_data |> select(-Yield),
+  method = c("medianImpute", "center", "scale")
+)
+
+x_train <- predict(
+  preprocess_model,
+  train_data |> select(-Yield)
+)
+
+x_test <- predict(
+  preprocess_model,
+  test_data |> select(-Yield)
+)
+
+train_processed <- bind_cols(
+  tibble(Yield = train_data$Yield),
+  as_tibble(x_train)
+)
+
+test_processed <- bind_cols(
+  tibble(Yield = test_data$Yield),
+  as_tibble(x_test)
+)
+
+# Check results
+dim(train_processed)
+dim(test_processed)
+
+sum(is.na(train_processed))
+sum(is.na(test_processed))
+```
+
+```{r}
+set.seed(42)
+
+folds <- createFolds(
+  train_processed$Yield,
+  k = 10,
+  returnTrain = TRUE
+)
+
+control <- trainControl(
+  method = "cv",
+  number = 10,
+  index = folds
+)
+```
+
+```{r}
+set.seed(42)
+
+knnModel <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "knn",
+  trControl = control,
+  tuneLength = 10
+)
+
+knnModel
+
+# Predictions
+knnPred <- predict(
+  knnModel,
+  newdata = test_processed
+)
+
+# Evaluation
+postResample(
+  pred = knnPred,
+  obs = test_processed$Yield
+)
+```
+
+```{r}
+# Mars model
+set.seed(42)
+
+marsModel <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "earth",
+  trControl = control,
+  tuneGrid = expand.grid(
+    nprune = 2:20,
+    degree = 1:2
+  )
+)
+
+marsModel
+
+# Predictions
+marsPred <- predict(
+  marsModel,
+  newdata = test_processed
+)
+
+# Evaluation
+postResample(
+  pred = marsPred,
+  obs = test_processed$Yield
+)
+
+# Final model
+summary(marsModel$finalModel)
+
+# Coefficients
+coef(marsModel$finalModel)
+
+# Variable importance
+mars_importance <- varImp(marsModel)
+
+mars_importance
+plot(mars_importance)
+
+# MARS diagnostic plots
+plot(marsModel$finalModel)
+```
+
+```{r}
+# SVM
+set.seed(42)
+
+svmLinearModel <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "svmLinear",
+  trControl = control,
+  tuneLength = 10
+)
+
+svmLinearModel
+
+# Predictions
+svmLinearPred <- predict(
+  svmLinearModel,
+  newdata = test_processed
+)
+
+postResample(
+  pred = svmLinearPred,
+  obs = test_processed$Yield
+)
+```
+
+```{r}
+#SVM Radial
+set.seed(42)
+
+svmRadialModel <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "svmRadial",
+  trControl = control,
+  tuneLength = 10
+)
+
+svmRadialModel
+
+# Predictions
+svmRadialPred <- predict(
+  svmRadialModel,
+  newdata = test_processed
+)
+
+postResample(
+  pred = svmRadialPred,
+  obs = test_processed$Yield
+)
+
+```
+
+```{r}
+# Neural Networks Model
+set.seed(42)
+
+nnetModel <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "nnet",
+  trControl = control,
+  tuneGrid = expand.grid(
+    size = c(1, 3, 5, 7, 10),
+    decay = c(0, 0.001, 0.01, 0.1)
+  ),
+  linout = TRUE,
+  trace = FALSE,
+  maxit = 500,
+  MaxNWts = 2000
+)
+
+nnetModel
+
+# Predictions
+nnetPred <- predict(
+  nnetModel,
+  newdata = test_processed
+)
+
+postResample(
+  pred = nnetPred,
+  obs = test_processed$Yield
+)
+```
+
+**##Compare all five**
+
+```{r}
+# Store predictions
+predictions <- list(
+  KNN = knnPred,
+  MARS = marsPred,
+  SVM_Linear = svmLinearPred,
+  SVM_Radial = svmRadialPred,
+  Neural_Network = nnetPred
+  
+)
+
+# Calculate performance metrics
+model_results <- lapply(
+  predictions,
+  function(pred) {
+    postResample(
+      pred = pred,
+      obs = test_processed$Yield
+    )
+  }
+)
+
+# Create comparison table
+comparison <- bind_rows(
+  model_results,
+  .id = "Model"
+) |>
+  arrange(RMSE)
+
+comparison
+```
+
+**##Visualize model performance**
+
+```{r}
+ggplot(
+  comparison,
+  aes(
+    x = reorder(Model, RMSE),
+    y = RMSE,
+    fill = Model
+  )
+) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "RMSE Comparison of Five Regression Models",
+    x = "Model",
+    y = "Test RMSE"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r}
+ggplot(
+  comparison,
+  aes(
+    x = reorder(Model, Rsquared),
+    y = Rsquared,
+    fill = Model
+  )
+) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "R-squared Comparison of Five Models",
+    x = "Model",
+    y = "Test R-squared"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r}
+predicted_data <- bind_rows(
+  lapply(
+    names(predictions),
+    function(name) {
+      tibble(
+        Model = name,
+        Actual = test_processed$Yield,
+        Predicted = predictions[[name]]
+      )
+    }
+  )
+)
+
+ggplot(
+  predicted_data,
+  aes(x = Actual, y = Predicted)
+) +
+  geom_point(alpha = 0.6) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    color = "red",
+    linewidth = 1
+  ) +
+  facet_wrap(~ Model) +
+  labs(
+    title = "Actual vs Predicted Manufacturing Yield",
+    x = "Actual Yield",
+    y = "Predicted Yield"
+  ) +
+  theme_minimal()
+```
+
+**##Compare cross-validation**
+
+```{r}
+model_resamples <- resamples(
+  list(
+    KNN = knnModel,
+    MARS = marsModel,
+    SVM_Linear = svmLinearModel,
+    SVM_Radial = svmRadialModel,
+    Neural_Network = nnetModel
+  
+  )
+)
+
+summary(model_resamples)
+
+bwplot(
+  model_resamples,
+  metric = "RMSE"
+)
+
+dotplot(
+  model_resamples,
+  metric = "RMSE"
+)
+```
+
+```{r}
+# Exclude linear SVM from nonlinear model selection
+nonlinear_comparison <- comparison |>
+  filter(Model != "SVM_Linear") |>
+  arrange(RMSE)
+
+nonlinear_comparison
+
+# Best nonlinear model
+best_nonlinear <- nonlinear_comparison |>
+  slice(1)
+
+best_nonlinear
+```
+
+```{r}
+# Best cross-validation RMSE for each nonlinear model
+cv_results <- bind_rows(
+  lapply(
+    list(
+      KNN = knnModel,
+      MARS = marsModel,
+      SVM_Radial = svmRadialModel,
+      Neural_Network = nnetModel
+      
+    ),
+    function(model) {
+      model$results |>
+        slice_min(RMSE, n = 1, with_ties = FALSE) |>
+        select(RMSE, Rsquared, MAE)
+    }
+  ),
+  .id = "Model"
+) |>
+  arrange(RMSE)
+
+cv_results
+```
+
+### (a) Optimal Nonlinear Regression Model
+
+Four nonlinear regression models were evaluated to predict chemical manufacturing yield: KNN, MARS, SVM Radial, and Neural Network. SVM Linear was also included for comparison.
+
+The models were trained using 10-fold cross-validation and evaluated on an independent test dataset.
+
+Based on cross-validation performance, SVM Radial achieved the lowest RMSE of 1.1075, followed closely by MARS with an RMSE of 1.1183. KNN and Neural Network produced higher cross-validation errors.
+
+However, on the independent test dataset, Neural Network achieved the lowest RMSE of 1.2259, with an R-squared of 0.6448 and an MAE of 0.9553.
+
+These results indicate that the best-performing model depends on the evaluation method. SVM Radial performed best during cross-validation, while Neural Network performed best on the test dataset.
+
+Therefore, SVM Radial was selected as the optimal nonlinear regression model based on cross-validation RMSE, with Neural Network providing the strongest test-set performance.
+
+**b. Which predictors are most important**
+
+```{r}
+library(caret)
+library(dplyr)
+library(ggplot2)
+
+set.seed(42)
+
+# Training predictors and response
+x_train <- train_processed |>
+  select(-Yield)
+
+y_train <- train_processed$Yield
+
+# Original predictions
+original_pred <- predict(
+  svmRadialModel,
+  newdata = x_train
+)
+
+# Original RMSE
+original_rmse <- RMSE(original_pred, y_train)
+
+# Calculate permutation importance
+permutation_importance <- function(model, data, response, nsim = 10) {
+  
+  baseline_pred <- predict(model, newdata = data)
+  baseline_rmse <- RMSE(baseline_pred, response)
+  
+  importance <- sapply(names(data), function(variable) {
+    
+    rmse_values <- replicate(nsim, {
+      
+      permuted_data <- data
+      
+      # Shuffle one predictor
+      permuted_data[[variable]] <- sample(
+        permuted_data[[variable]]
+      )
+      
+      # Predict with shuffled data
+      permuted_pred <- predict(
+        model,
+        newdata = permuted_data
+      )
+      
+      RMSE(permuted_pred, response) - baseline_rmse
+    })
+    
+    mean(rmse_values)
+  })
+  
+  data.frame(
+    Variable = names(importance),
+    Importance = as.numeric(importance)
+  ) |>
+    arrange(desc(Importance))
+}
+
+# permutation importance
+set.seed(42)
+
+svm_importance <- permutation_importance(
+  model = svmRadialModel,
+  data = train_processed |> select(-Yield),
+  response = train_processed$Yield,
+  nsim = 30
+)
+
+top10_nonlinear <- svm_importance |>
+  slice_head(n = 10)
+
+top10_nonlinear
+
+# Export SVM Radial top 10 predictors
+write.csv(
+  top10_nonlinear,
+  "svm_top10.csv",
+  row.names = FALSE
+)
+
+# Verify that the file exists
+file.exists("svm_top10.csv")
+```
+
+```{r}
+top10_nonlinear <- svm_importance |>
+  slice_head(n = 10)
+
+top10_nonlinear
+```
+
+```{r}
+# Biological predictors
+biological_vars <- names(
+  ChemicalManufacturingProcess
+)[2:13]
+
+top10_nonlinear <- top10_nonlinear |>
+  mutate(
+    Variable_Type = if_else(
+      Variable %in% biological_vars,
+      "Biological",
+      "Process"
+    )
+  )
+
+top10_nonlinear
+
+# Count biological vs process
+top10_nonlinear |>
+  count(Variable_Type)
+```
+
+```{r}
+ggplot(
+  top10_nonlinear,
+  aes(
+    x = reorder(Variable, Importance),
+    y = Importance,
+    fill = Variable_Type
+  )
+) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Top 10 Important Predictors - SVM Radial",
+    x = "Predictor",
+    y = "Increase in RMSE",
+    fill = "Variable Type"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Import Ridge results from Exercise 6.3
+top10_linear <- read.csv("ridge_top10.csv")
+
+top10_linear
+
+# Predictors shared by both models
+common_predictors <- intersect(
+  top10_nonlinear$Variable,
+  top10_linear$Predictor
+)
+
+common_predictors
+
+# Predictors unique to SVM Radial
+unique_nonlinear <- setdiff(
+  top10_nonlinear$Variable,
+  top10_linear$Predictor
+)
+
+unique_nonlinear
+
+# Predictors unique to Ridge
+unique_linear <- setdiff(
+  top10_linear$Predictor,
+  top10_nonlinear$Variable
+)
+
+unique_linear
+```
+
+```{r}
+# Predictors shared by both models
+common_predictors <- intersect(
+  top10_nonlinear$Variable,
+  top10_linear$Predictor
+)
+
+common_predictors
+
+# Predictors unique to SVM Radial
+unique_nonlinear <- setdiff(
+  top10_nonlinear$Variable,
+  top10_linear$Predictor
+)
+
+unique_nonlinear
+
+# Predictors unique to linear model
+unique_linear <- setdiff(
+  top10_linear$Predictor,
+  top10_nonlinear$Variable
+)
+
+unique_linear
+```
+
+### (b) Important Predictors
+
+Permutation importance was used to identify the ten most influential predictors in the SVM Radial model.
+
+ManufacturingProcess32 was the most important predictor, with an increase in RMSE of approximately 0.6265 when its values were randomly shuffled. ManufacturingProcess36 and ManufacturingProcess09 followed, with increases in RMSE of approximately 0.3299 and 0.2937, respectively.
+
+Among the ten most important predictors, nine were manufacturing process variables and one was a biological material variable (BiologicalMaterial03).
+
+These results suggest that manufacturing process variables contribute substantially to the SVM Radial model's predictive performance. However, variable importance does not necessarily indicate a causal relationship with manufacturing yield.
+
+**c. Explore the relationships between the top predictors and the response for the predictors that are unique to the optimal nonlinear regression model. Do these plots reveal intuition about the biological or process predictors and their relationship with yield?**
+
+```{r}
+# Plot predictors unique to the nonlinear model
+plot_data <- train_data |>
+  select(Yield, all_of(unique_nonlinear)) |>
+  pivot_longer(
+    cols = all_of(unique_nonlinear),
+    names_to = "Predictor",
+    values_to = "Value"
+  ) |>
+  filter(!is.na(Value), !is.na(Yield))
+
+ggplot(
+  plot_data,
+  aes(x = Value, y = Yield)
+) +
+  geom_point(
+    alpha = 0.5,
+    color = "steelblue"
+  ) +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ x + I(x^2),
+    se = TRUE,
+    color = "red"
+  ) +
+  facet_wrap(
+    ~ Predictor,
+    scales = "free_x"
+  ) +
+  labs(
+    title = "Unique  SVM Radial Predictors vs Yield",
+    x = "Predictor Value",
+    y = "Manufacturing Yield (%)"
+  ) +
+  theme_minimal()
+```
+
+### (c) Relationships Between Unique Nonlinear Predictors and Yield
+
+The relationships between manufacturing yield and three predictors appearing in the SVM Radial model's top-ten importance list, but not in the Ridge model's top-ten list, were examined using scatterplots and quadratic regression curves.
+
+ManufacturingProcess28 shows a potentially nonlinear relationship with yield. However, observations are concentrated in two distinct groups, making it difficult to determine the relationship between them. The wide confidence interval indicates substantial uncertainty in the fitted curve.
+
+ManufacturingProcess37 shows a slight decrease in yield as its value increases, followed by a relatively stable relationship. However, the observations are widely scattered, suggesting a weak individual association with yield.
+
+ManufacturingProcess38 shows a slight curved relationship, but most observations are concentrated at values of 2 and 3. Therefore, the evidence for a nonlinear relationship is limited.
+
+Overall, these plots suggest that some manufacturing process predictors may have nonlinear associations with yield. However, the relationships are not sufficiently strong or consistent to establish clear nonlinear effects. The results also suggest that relationships between manufacturing process variables and yield may be more complex than those captured by simple individual predictor plots.

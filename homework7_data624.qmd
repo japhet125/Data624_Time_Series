@@ -694,6 +694,19 @@ ggplot(top_15,
   theme_minimal()
 names(process_predictors)
 top_15$Predictor
+
+# Extract the top 10 Ridge predictors
+top10_linear <- importance_df |>
+  slice_head(n = 10)
+
+top10_linear
+
+# Export results for Exercise 7.5
+write.csv(
+  top10_linear,
+  "ridge_top10.csv",
+  row.names = FALSE
+)
 ```
 
 ### Interpretation: Important Predictors

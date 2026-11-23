@@ -1,7 +1,8 @@
 ---
 title: "Group Presentation SVM"
-format: html
-editor: visual
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ## Support Vector Machines
@@ -18,6 +19,9 @@ The basics of Support Vector Machines and how it works are best understood with 
 
 ```{r}
 library(tidyverse)
+library(tidyverse)
+library(ggplot2)
+library(e1071)
 
 set.seed(123)
 
@@ -31,7 +35,7 @@ svm_data <- data.frame(
 )
 
 # Plot training data
-ggplot(svm_data, aes(x = x, y = y, color = Class)) +
+svm_plot <- ggplot(svm_data, aes(x = x, y = y, color = Class)) +
   geom_point(size = 3) +
   scale_color_manual(values = c("Red" = "red",
                                 "Blue" = "blue")) +
@@ -43,6 +47,24 @@ ggplot(svm_data, aes(x = x, y = y, color = Class)) +
     color = "Class"
   ) +
   theme_minimal()
+
+# Display the plot
+print(svm_plot)
+
+# Save for PowerPoint
+ggsave(
+  filename = "SVM_training_data.png",
+  plot = svm_plot,
+  width = 10,
+  height = 6,
+  dpi = 300
+)
+
+# Check where the file was saved
+getwd()
+
+# Check whether the file exists
+file.exists("SVM_training_dta.png")
 ```
 
 ```{r}
@@ -74,9 +96,7 @@ plot(
 ```
 
 ```{r}
-library(tidyverse)
-library(ggplot2)
-library(e1071)
+
 
 # Create a grid of coordinates
 grid <- expand.grid(
@@ -98,7 +118,7 @@ grid$decision <- as.vector(
 # Identify support vectors
 support_vectors <- svm_data[svm_model$index, ]
 
-ggplot() +
+svm_cla <- ggplot() +
 
   # Margins (-1 and +1)
   geom_contour(
@@ -151,6 +171,24 @@ ggplot() +
 
   coord_equal() +
   theme_minimal()
+
+# Display the plot
+print(svm_cla)
+
+# Save for PowerPoint
+ggsave(
+  filename = "Support_vector_mc.png",
+  plot = svm_cla,
+  width = 8,
+  height = 8,
+  dpi = 300
+)
+
+# Check where the file was saved
+getwd()
+
+# Check whether the file exists
+file.exists("Support_vector_mc.png")
 ```
 
 - The solid line represents the SVM decision boundary.
@@ -210,7 +248,7 @@ svm_nonlinear <- data.frame(
 )
 
 # Visualize the training data
-ggplot(svm_nonlinear,
+svm_nl <- ggplot(svm_nonlinear,
        aes(x = x, y = y, color = Class)) +
   geom_point(size = 2.5) +
   scale_color_manual(
@@ -223,6 +261,24 @@ ggplot(svm_nonlinear,
   ) +
   coord_equal() +
   theme_minimal()
+
+# Display the plot
+print(svm_nl)
+
+# Save for PowerPoint
+ggsave(
+  filename = "Support_vector_NonLinear.png",
+  plot = svm_nl,
+  width = 8,
+  height = 8,
+  dpi = 300
+)
+
+# Check where the file was saved
+getwd()
+
+# Check whether the file exists
+file.exists("Support_vector_NonLinear.png")
 ```
 
 ##Interpretation
@@ -284,7 +340,7 @@ Two important parameters:
   ]
 
   # Visualization
-  ggplot() +
+  nonlinear_svm <- ggplot() +
 
     # Classification regions
     geom_raster(
@@ -346,6 +402,25 @@ Two important parameters:
 
     coord_equal() +
     theme_minimal()
+
+  # Display the plot
+  print(nonlinear_svm)
+
+  # Save for PowerPoint
+  ggsave(
+    filename = "Non_Linear_SVM.png",
+    plot = nonlinear_svm,
+    width = 8,
+    height = 8,
+    dpi = 300
+  )
+
+  # Check where the file was saved
+  getwd()
+
+  # Check whether the file exists
+  file.exists("Non_Linear_SVM.png")
+
   ```
 
 ## Compare linear and nonlinear SVM
@@ -406,7 +481,7 @@ So to recap, Support Vector Machines are a subclass of supervised classifiers th
 
 Personally, I think SVMs are great classifiers for specific situations when the groups are clearly separated. They also do a great job when your data is non-linearly separated. You could transform data to linearly separate it, or you can have SVMs convert the data and linearly separate the two classes right out of the box. This is one of the main reasons to use SVMs. You don’t have to transform non-linear data yourself. One downside to SVMs is the black box nature of these functions. The use of kernels to separate non-linear data makes them difficult (if not impossible) to interpret. Understanding them will give you an alternative to GLMs and decision trees for classification. I hope this tutorial gives you a broader view of the SVM panorama and will allow you to understand these machines better.
 
-##References
+**##References**
 
 **Support vector machines**
 

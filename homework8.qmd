@@ -1,0 +1,701 @@
+---
+title: "Model selection and Examination Tree-Based Models"
+author: "Guibril Ramde"
+format:
+  html: default
+  pdf: default
+editor: visual
+---
+
+## Exercise 8
+
+**##Exercise 8.1**
+
+```{r}
+#install.packages('')
+library(mlbench)
+set.seed(200)
+simulated <- mlbench.friedman1(200, sd = 1)
+simulated <- cbind(simulated$x, simulated$y)
+simulated <- as.data.frame(simulated)
+colnames(simulated)[ncol(simulated)] <- "y"
+```
+
+a\. Fit a random forest model to all of the predictors, then estimate the variable importance scores:
+
+```{r}
+library(randomForest)
+library(caret)
+
+model1 <- randomForest(y ~ ., data = simulated, importance = TRUE, ntree= 1000)
+model1
+rfImp1 <- varImp(model1, scale = FALSE)
+rfImp1
+
+plot(rfImp1)
+
+```
+
+Did the random forest model significantly use the uninformative predictors (V6 – V10)?
+
+**##Answer:**
+
+The random forest model used all ten predictors (V1–V10) to predict the response variable y. However, the variable importance scores for the uninformative predictors (V6–V10) were relatively low, with some values near zero or negative. This suggests that these predictors contributed little to the model's predictive performance compared with the informative predictors (V1–V5). Therefore, the random forest did not rely heavily on the uninformative predictors.
+
+b\. Now add an additional predictor that is highly correlated with one of the informative predictors. For example:
+
+```{r}
+library(randomForest)
+library(caret)
+
+simulated2 <- simulated
+
+set.seed(201)
+simulated2$duplicate1 <- simulated2$V1 + rnorm(200) * 0.1
+
+# Check correlation
+cor(simulated2$duplicate1, simulated2$V1)
+
+# Fit a new random forest
+set.seed(200)
+
+model2 <- randomForest(
+  y ~ .,
+  data = simulated2,
+  importance = TRUE,
+  ntree = 1000
+)
+
+model2
+
+# Variable importance
+rfImp2 <- varImp(model2, scale = FALSE)
+
+rfImp2
+
+plot(rfImp2)
+```
+
+Did the importance score for V1 change? What happens when you add another predictor that is also highly correlated with V1?
+
+```{r}
+# Create a third dataset
+simulated3 <- simulated2
+
+# Add another correlated predictor
+set.seed(202)
+
+simulated3$duplicate2 <- simulated3$V1 + rnorm(200) * 0.1
+
+# Check correlations
+cor(simulated3[, c("V1", "duplicate1", "duplicate2")])
+
+# Fit third random forest
+set.seed(200)
+
+model3 <- randomForest(
+  y ~ .,
+  data = simulated3,
+  importance = TRUE,
+  ntree = 1000
+)
+
+# Variable importance
+rfImp3 <- varImp(model3, scale = FALSE)
+
+rfImp3
+
+plot(rfImp3)
+
+# Compare the importance of V1 across all three models
+data.frame(
+  Model = c("Model 1", "Model 2", "Model 3"),
+  V1_Importance = c(
+    rfImp1["V1", 1],
+    rfImp2["V1", 1],
+    rfImp3["V1", 1]
+  )
+)
+
+```
+
+**##Answer:**
+
+After adding a predictor highly correlated with V1, the variable importance score for V1 decreased from 8.6254 to 6.6678. When another highly correlated predictor was added, the importance score decreased further to 4.8956. This suggests that the random forest model distributes predictive information among correlated predictors, reducing the individual importance score of V1. Therefore, adding highly correlated predictors can affect variable importance scores even when the original predictor remains informative.
+
+**c. Use the cforest function in the party package to fit a random forest model using conditional inference trees.**
+
+```{r}
+library(party)
+
+# Conditional inference forests
+set.seed(200)
+cforest1 <- cforest(y ~ ., data = simulated)
+
+set.seed(200)
+cforest2 <- cforest(y ~ ., data = simulated2)
+
+set.seed(200)
+cforest3 <- cforest(y ~ ., data = simulated3)
+
+# Traditional permutation importance
+imp1 <- varimp(cforest1, conditional = FALSE)
+imp2 <- varimp(cforest2, conditional = FALSE)
+imp3 <- varimp(cforest3, conditional = FALSE)
+
+# Conditional permutation importance
+cond_imp1 <- varimp(cforest1, conditional = TRUE)
+cond_imp2 <- varimp(cforest2, conditional = TRUE)
+cond_imp3 <- varimp(cforest3, conditional = TRUE)
+
+# Compare V1 importance
+comparison <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3"),
+  
+  RandomForest = c(
+    rfImp1["V1", 1],
+    rfImp2["V1", 1],
+    rfImp3["V1", 1]
+  ),
+  
+  Cforest_Traditional = c(
+    imp1["V1"],
+    imp2["V1"],
+    imp3["V1"]
+  ),
+  
+  Cforest_Conditional = c(
+    cond_imp1["V1"],
+    cond_imp2["V1"],
+    cond_imp3["V1"]
+  )
+)
+
+comparison
+```
+
+## **Interpretation**
+
+No, the cforest importance scores did not show exactly the same pattern as the traditional random forest. In the traditional random forest, V1's importance decreased consistently as correlated predictors were added. However, both the traditional and conditional importance scores from cforest initially increased after adding the first correlated predictor and then decreased after adding the second. This suggests that correlated predictors can affect variable importance differently depending on the method used. Overall, all three methods showed a decrease in V1's importance after adding two correlated predictors.
+
+d\. repeating with different tree model Boosted tree and Cubist tree
+
+```{r}
+##install.packages('gbm')
+library(gbm)
+
+# Model 1: Original predictors
+set.seed(200)
+gbmModel1 <- gbm(
+  y ~ .,
+  data = simulated,
+  distribution = "gaussian",
+  n.trees = 1000,
+  interaction.depth = 3,
+  shrinkage = 0.01,
+  verbose = FALSE
+)
+
+# Model 2: One correlated predictor
+set.seed(200)
+gbmModel2 <- gbm(
+  y ~ .,
+  data = simulated2,
+  distribution = "gaussian",
+  n.trees = 1000,
+  interaction.depth = 3,
+  shrinkage = 0.01,
+  verbose = FALSE
+)
+
+# Model 3: Two correlated predictors
+set.seed(200)
+gbmModel3 <- gbm(
+  y ~ .,
+  data = simulated3,
+  distribution = "gaussian",
+  n.trees = 1000,
+  interaction.depth = 3,
+  shrinkage = 0.01,
+  verbose = FALSE
+)
+gbmImp1 <- summary(gbmModel1, plotit = FALSE)
+gbmImp2 <- summary(gbmModel2, plotit = FALSE)
+gbmImp3 <- summary(gbmModel3, plotit = FALSE)
+
+gbmImp1
+gbmImp2
+gbmImp3
+```
+
+```{r}
+data.frame(
+  Model = c("Model 1", "Model 2", "Model 3"),
+  GBM_V1_Importance = c(
+    gbmImp1$rel.inf[gbmImp1$var == "V1"],
+    gbmImp2$rel.inf[gbmImp2$var == "V1"],
+    gbmImp3$rel.inf[gbmImp3$var == "V1"]
+  )
+)
+```
+
+```{r}
+library(Cubist)
+
+# Model 1: Original predictors
+set.seed(200)
+cubistModel1 <- cubist(
+  x = simulated[, setdiff(names(simulated), "y")],
+  y = simulated$y,
+  committees = 50
+)
+
+# Model 2: One correlated predictor
+set.seed(200)
+cubistModel2 <- cubist(
+  x = simulated2[, setdiff(names(simulated2), "y")],
+  y = simulated2$y,
+  committees = 50
+)
+
+# Model 3: Two correlated predictors
+set.seed(200)
+cubistModel3 <- cubist(
+  x = simulated3[, setdiff(names(simulated3), "y")],
+  y = simulated3$y,
+  committees = 50
+)
+cubistImp1 <- varImp(cubistModel1)
+cubistImp2 <- varImp(cubistModel2)
+cubistImp3 <- varImp(cubistModel3)
+
+cubistImp1
+cubistImp2
+cubistImp3
+
+data.frame(
+  Model = c("Model 1", "Model 2", "Model 3"),
+  Cubist_V1_Importance = c(
+    cubistImp1["V1", 1],
+    cubistImp2["V1", 1],
+    cubistImp3["V1", 1]
+  )
+)
+```
+
+```{r}
+comparison_d <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3"),
+  
+  GBM = c(
+    gbmImp1$rel.inf[gbmImp1$var == "V1"],
+    gbmImp2$rel.inf[gbmImp2$var == "V1"],
+    gbmImp3$rel.inf[gbmImp3$var == "V1"]
+  ),
+  
+  Cubist = c(
+    cubistImp1["V1", 1],
+    cubistImp2["V1", 1],
+    cubistImp3["V1", 1]
+  )
+)
+
+comparison_d
+```
+
+## **Interpretation:**
+
+The boosted tree (GBM) and Cubist models did not show the same pattern as the traditional random forest. Both GBM and Cubist showed a similar pattern: the importance score of V1 increased from Model 1 to Model 2, then decreased in Model 3 after adding another highly correlated predictor. This suggests that correlated predictors affect variable importance differently depending on the modeling method used.
+
+**##Exercise 8.2**
+
+```{r}
+#install.packages('rpart')
+library(rpart)
+library(dplyr)
+library(rpart)
+#library(rpart.plot)
+
+set.seed(200)
+
+n <- 200
+
+simulated_tree <- data.frame(
+  X1 = sample(1:2, n, replace = TRUE),
+  X2 = sample(1:5, n, replace = TRUE),
+  X3 = sample(1:20, n, replace = TRUE),
+  X4 = runif(n)
+)
+
+# Response independent of all predictors
+simulated_tree$y <- rnorm(n)
+
+# Check the number of unique values
+sapply(simulated_tree, function(x) length(unique(x)))
+
+
+
+tree_model <- rpart(
+  y ~ .,
+  data = simulated_tree,
+  method = "anova",
+  control = rpart.control(
+    cp = 0,
+    minsplit = 10
+  )
+)
+
+#rpart.plot(tree_model)
+
+tree_model$variable.importance
+
+```
+
+```{r}
+library(rpart)
+
+set.seed(200)
+
+results <- replicate(100, {
+  
+  simulated_tree <- data.frame(
+    X1 = sample(1:2, 200, replace = TRUE),
+    X2 = sample(1:5, 200, replace = TRUE),
+    X3 = sample(1:20, 200, replace = TRUE),
+    X4 = runif(200),
+    y = rnorm(200)
+  )
+  
+  tree_model <- rpart(
+    y ~ .,
+    data = simulated_tree,
+    method = "anova",
+    control = rpart.control(
+      cp = 0,
+      minsplit = 10,
+      xval = 0
+    )
+  )
+  
+  as.character(tree_model$frame$var[1])
+})
+
+# Count how frequently each predictor was selected
+table(factor(results, levels = c("X1", "X2", "X3", "X4")))
+```
+
+## **Interpretation:**
+
+The simulation shows how different predictor granularities can affect variable importance in a decision tree. All predictors have the same sample size of 200 observations, but they have different numbers of unique values. Predictors with more unique values provide more possible splitting points, which can cause the decision tree to assign them higher importance even when they are not related to the response variable. This demonstrates how decision trees can be biased toward predictors with higher granularity.
+
+**Exercise 8.3**
+
+**a. Why does the model on the right focus its importance on just the first few of predictors, whereas the model on the left spreads importance across more predictors?**
+
+The model on the right focuses on fewer predictors because it uses a higher learning rate and bagging fraction. The higher learning rate allows the model to make larger adjustments, while the higher bagging fraction uses more observations to build each tree. As a result, the model concentrates importance on a few predictors. The model on the left uses smaller values, which spreads importance across more predictors.
+
+**b. Which model do you think would be more predictive of other samples?**
+
+I would expect the model on the left to perform better on new samples because it uses a lower learning rate, allowing the model to learn more gradually and potentially reduce overfitting. The model on the right makes larger adjustments, which may increase the risk of overfitting. However, we would need to compare their prediction errors on test data to determine which model performs better.
+
+**c. How would increasing interaction depth affect the slope of predictor importance for either model in Fig. 8.24?**
+
+Increasing the interaction depth allows the boosted trees to capture more complex relationships between predictors. This may spread variable importance across more predictors and produce a flatter importance curve. However, if a few predictors dominate the interactions, the importance scores may remain concentrated among those predictors.
+
+8.7
+
+```{r}
+library(tidyverse)
+library(AppliedPredictiveModeling)
+library(caret)
+library(earth)
+library(kernlab)
+library(nnet)
+
+set.seed(42)
+
+data(ChemicalManufacturingProcess)
+
+# Dataset exploration
+head(ChemicalManufacturingProcess)
+dim(ChemicalManufacturingProcess)
+str(ChemicalManufacturingProcess)
+summary(ChemicalManufacturingProcess)
+
+# Missing values
+sum(is.na(ChemicalManufacturingProcess))
+colSums(is.na(ChemicalManufacturingProcess))
+```
+
+```{r}
+# Remove observations with missing response
+model_data <- ChemicalManufacturingProcess |>
+  filter(!is.na(Yield))
+
+set.seed(42)
+
+train_index <- createDataPartition(
+  model_data$Yield,
+  p = 0.80,
+  list = FALSE
+)
+
+train_data <- model_data[train_index, , drop = FALSE]
+test_data <- model_data[-train_index, , drop = FALSE]
+
+# Preprocessing
+preprocess_model <- preProcess(
+  train_data |> select(-Yield),
+  method = c("medianImpute", "center", "scale")
+)
+
+x_train <- predict(
+  preprocess_model,
+  train_data |> select(-Yield)
+)
+
+x_test <- predict(
+  preprocess_model,
+  test_data |> select(-Yield)
+)
+
+train_processed <- bind_cols(
+  tibble(Yield = train_data$Yield),
+  as_tibble(x_train)
+)
+
+test_processed <- bind_cols(
+  tibble(Yield = test_data$Yield),
+  as_tibble(x_test)
+)
+
+# Check results
+dim(train_processed)
+dim(test_processed)
+
+sum(is.na(train_processed))
+sum(is.na(test_processed))
+```
+
+```{r}
+library(caret)
+library(rpart)
+library(randomForest)
+library(gbm)
+library(Cubist)
+library(party)
+
+# Same resampling method
+set.seed(200)
+
+ctrl <- trainControl(
+  method = "cv",
+  number = 10,
+  savePredictions = "final"
+)
+
+# Regression tree
+set.seed(200)
+cart_model <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "rpart",
+  trControl = ctrl,
+  tuneLength = 10
+)
+
+# Random forest
+set.seed(200)
+rf_model <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "rf",
+  trControl = ctrl,
+  tuneLength = 5,
+  ntree = 1000
+)
+
+# Boosted trees
+set.seed(200)
+gbm_model <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "gbm",
+  trControl = ctrl,
+  tuneLength = 5,
+  verbose = FALSE
+)
+
+# Cubist
+# Separate predictors and response
+x_train <- train_processed |>
+  select(-Yield) |>
+  as.data.frame()
+
+y_train <- train_processed$Yield
+
+# Verify
+class(x_train)
+class(y_train)
+
+# Fit Cubist
+set.seed(200)
+
+cubist_model <- train(
+  x = x_train,
+  y = y_train,
+  method = "cubist",
+  trControl = ctrl,
+  tuneLength = 5
+)
+
+cubist_model
+# Conditional inference tree
+set.seed(200)
+ctree_model <- train(
+  Yield ~ .,
+  data = train_processed,
+  method = "ctree",
+  trControl = ctrl,
+  tuneLength = 5
+)
+```
+
+```{r}
+results <- resamples(
+  list(
+    CART = cart_model,
+    RF = rf_model,
+    GBM = gbm_model,
+    Cubist = cubist_model,
+    CTree = ctree_model
+  )
+)
+
+summary(results)
+
+bwplot(results, metric = "RMSE")
+```
+
+```{r}
+library(dplyr)
+
+models <- list(
+  CART = cart_model,
+  RF = rf_model,
+  GBM = gbm_model,
+  Cubist = cubist_model,
+  CTree = ctree_model
+)
+
+test_results <- lapply(names(models), function(name) {
+  
+  predictions <- predict(models[[name]], newdata = test_processed)
+  
+  data.frame(
+    Model = name,
+    RMSE = RMSE(predictions, test_processed$Yield),
+    Rsquared = R2(predictions, test_processed$Yield),
+    MAE = MAE(predictions, test_processed$Yield)
+  )
+}) |>
+  bind_rows() |>
+  arrange(RMSE)
+
+test_results
+```
+
+## **Interpretation:** 
+
+The Cubist regression model showed the best overall test performance among the five tree-based models, with the lowest RMSE of 0.9540, MAE of 0.7306, and highest R² of 0.7949. Random Forest was the second-best model on the test set, followed by GBM, CART, and CTree. The cross-validation plot also showed that Cubist and GBM had relatively low prediction errors. Overall, Cubist appears to be the optimal tree-based model for predicting manufacturing Yield.
+
+b\. Identify the most important predictors
+
+```{r}
+cubist_importance <- varImp(cubist_model, scale = FALSE)
+
+cubist_importance
+
+plot(cubist_importance, top = 10)
+
+top10_tree <- cubist_importance$importance |>
+  tibble::rownames_to_column("Predictor") |>
+  arrange(desc(Overall)) |>
+  slice_head(n = 10)
+
+top10_tree
+
+```
+
+## **Interpretation:**
+
+The Cubist model identified ManufacturingProcess32, ManufacturingProcess09, and ManufacturingProcess17 as the three most important predictors, with importance scores of 52.5, 35.0, and 30.0, respectively. Among the top 10 predictors, eight were manufacturing process variables and two were biological material variables. This suggests that manufacturing process variables play a major role in predicting Yield in the Cubist model. However, biological material variables also contribute to the prediction.
+
+```{r}
+library(dplyr)
+
+# Import results from previous exercises
+top10_linear <- read.csv("ridge_top10.csv")
+top10_nonlinear <- read.csv("svm_top10.csv")
+
+# Cubist vs Ridge
+common_linear <- intersect(
+  top10_tree$Predictor,
+  top10_linear$Predictor
+)
+
+# Cubist vs SVM Radial
+common_nonlinear <- intersect(
+  top10_tree$Predictor,
+  top10_nonlinear$Variable
+)
+
+common_linear
+common_nonlinear
+
+
+
+
+```
+
+**c. Plot the optimal**
+
+```{r}
+#install.packages('rpart.plot')
+library(rpart.plot)
+
+rpart.plot(
+  cart_model$finalModel,
+  #cubist_model$finalModel,
+  type = 2,
+  extra = 101,
+  fallen.leaves = TRUE,
+  main = "Regression Tree for Manufacturing Yield"
+)
+```
+
+```{r}
+library(ggplot2)
+
+node_data <- data.frame(
+  Yield = train_processed$Yield,
+  Node = factor(cart_model$finalModel$where)
+)
+
+ggplot(node_data, aes(x = Node, y = Yield)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7) +
+  labs(
+    title = "Distribution of Yield in Terminal Nodes",
+    x = "Terminal Node",
+    y = "Manufacturing Yield"
+  ) +
+  theme_minimal()
+```
+
+## **Interpretation:**
+
+Yes, the regression tree provides additional information about the relationships between biological material, manufacturing process predictors, and Yield. ManufacturingProcess32 is the first splitting variable, suggesting that it plays an important role in predicting Yield. Other process variables, including ManufacturingProcess17, ManufacturingProcess13, and ManufacturingProcess03, also contribute to the tree, while BiologicalMaterial03 and BiologicalMaterial05 indicate that biological characteristics are important as well.
+
+The terminal-node boxplot shows that Yield differs across groups of observations. Node 5 has the lowest median Yield of approximately 37.3, while Node 15 has the highest median Yield of approximately 43.0. This suggests that certain combinations of biological and manufacturing process conditions are associated with higher manufacturing yields.
+
+Overall, the regression tree provides additional insight by showing how different predictors interact to separate observations into groups with different Yield levels. However, these relationships are associations and do not necessarily indicate causation.

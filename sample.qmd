@@ -1,0 +1,224 @@
+---
+title: "Group Project"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(fpp3)
+library(AppliedPredictiveModeling)
+library(caret)
+#install.packages("e1071")
+library(e1071)
+
+```
+
+```{r}
+
+# Load dataset
+data(ChemicalManufacturingProcess)
+
+# Preview observations
+head(ChemicalManufacturingProcess)
+
+# Dataset dimensions
+dim(ChemicalManufacturingProcess)
+nrow(ChemicalManufacturingProcess)
+ncol(ChemicalManufacturingProcess)
+
+# Missing values
+sum(is.na(ChemicalManufacturingProcess))
+colSums(is.na(ChemicalManufacturingProcess))
+
+# Dataset structure
+str(ChemicalManufacturingProcess)
+
+# Variable names
+names(ChemicalManufacturingProcess)
+
+# Descriptive statistics
+summary(ChemicalManufacturingProcess)
+
+```
+
+```{r}
+
+# Distribution of Yield
+yield_plot <- ggplot(
+  ChemicalManufacturingProcess,
+  aes(x = Yield)
+) +
+  geom_histogram(
+    bins = 20,
+    fill = "steelblue",
+    color = "black"
+  ) +
+  labs(
+    title = "Distribution of Chemical Manufacturing Yield",
+    x = "Yield (%)",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+
+print(yield_plot)
+
+```
+
+#Prepare the data for SVM
+
+```{r}
+
+set.seed(123)
+
+# Split into training and testing sets
+train_index <- createDataPartition(
+  ChemicalManufacturingProcess$Yield,
+  p = 0.80,
+  list = FALSE
+)
+
+train_data <- ChemicalManufacturingProcess[train_index, ]
+test_data <- ChemicalManufacturingProcess[-train_index, ]
+
+# Median imputation, estimated using training data only
+preprocess_model <- preProcess(
+  train_data |> select(-Yield),
+  method = c("medianImpute", "center", "scale")
+)
+preprocess_model
+# Apply preprocessing
+x_train <- predict(
+  preprocess_model,
+  train_data |> select(-Yield)
+)
+x_train
+x_test <- predict(
+  preprocess_model,
+  test_data |> select(-Yield)
+)
+x_test
+train_processed <- bind_cols(
+  Yield = train_data$Yield,
+  x_train
+)
+train_processed
+test_processed <- bind_cols(
+  Yield = test_data$Yield,
+  x_test
+)
+test_processed
+```
+
+# Train linear and nonlinear svm
+
+```{r}
+
+# Linear Support Vector Regression
+svm_linear <- svm(
+  Yield ~ .,
+  data = train_processed,
+  kernel = "linear",
+  cost = 1,
+  epsilon = 0.1,
+  scale = FALSE
+)
+
+# Nonlinear Support Vector Regression
+svm_radial <- svm(
+  Yield ~ .,
+  data = train_processed,
+  kernel = "radial",
+  cost = 10,
+  gamma = 1 / (ncol(train_processed) - 1),
+  epsilon = 0.1,
+  scale = FALSE
+)
+
+summary(svm_linear)
+summary(svm_radial)
+
+```
+
+## compare the two models
+
+```{r}
+
+# Predictions on test data
+linear_pred <- predict(
+  svm_linear,
+  test_processed
+)
+
+radial_pred <- predict(
+  svm_radial,
+  test_processed
+)
+
+# Model performance
+linear_results <- postResample(
+  pred = linear_pred,
+  obs = test_processed$Yield
+)
+
+radial_results <- postResample(
+  pred = radial_pred,
+  obs = test_processed$Yield
+)
+
+# Comparison table
+model_comparison <- data.frame(
+  Model = c("Linear SVR", "Radial SVR"),
+  RMSE = c(
+    linear_results["RMSE"],
+    radial_results["RMSE"]
+  ),
+  Rsquared = c(
+    linear_results["Rsquared"],
+    radial_results["Rsquared"]
+  ),
+  MAE = c(
+    linear_results["MAE"],
+    radial_results["MAE"]
+  )
+)
+
+model_comparison
+
+```
+
+## Visualize actual vs predicted
+
+```{r}
+
+prediction_data <- data.frame(
+  Actual = rep(test_processed$Yield, 2),
+  Predicted = c(linear_pred, radial_pred),
+  Model = rep(
+    c("Linear SVR", "Radial SVR"),
+    each = nrow(test_processed)
+  )
+)
+
+ggplot(
+  prediction_data,
+  aes(x = Actual, y = Predicted)
+) +
+  geom_point(color = "steelblue", size = 2) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  facet_wrap(~ Model) +
+  labs(
+    title = "Actual vs Predicted Manufacturing Yield",
+    x = "Actual Yield (%)",
+    y = "Predicted Yield (%)"
+  ) +
+  theme_minimal()
+
+```
+
+##MARS:
